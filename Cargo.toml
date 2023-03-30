@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "chip8-rs",
+    "libchip8"
+]
+
+resolver = "2"
