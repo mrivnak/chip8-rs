@@ -11,4 +11,5 @@ Cargo.lock
 
 # Visual Studio Code
 *.code-workspace
-.vscode/
+.vscode/*
+!.vscode/extensions.json
