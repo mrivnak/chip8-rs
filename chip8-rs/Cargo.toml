@@ -7,7 +7,7 @@ edition = "2021"
 rust-version = "1.62.1"
 
 [dependencies]
-clap = { version = "4.2.1", features = ["derive"] }
+clap = { version = "4.2.5", features = ["derive"] }
 env_logger = "0.10.0"
 libchip8 = { path = "../libchip8" }
 wgpu = "0.15.1"
