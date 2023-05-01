@@ -10,5 +10,5 @@ rust-version = "1.62.1"
 clap = { version = "4.2.5", features = ["derive"] }
 env_logger = "0.10.0"
 libchip8 = { path = "../libchip8" }
-wgpu = "0.15.1"
+wgpu = "0.16.0"
 winit = "0.28.3"
