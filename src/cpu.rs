@@ -45,7 +45,7 @@ mod tests {
     #[test]
     fn test_load_rom() {
         let mut romPath = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        romPath.push("../res/test/test_opcode.ch8");
+        romPath.push("res/test/test_opcode.ch8");
         println!("{:?}", romPath);
 
         let file = std::fs::File::open(romPath.clone()).expect("Could not open file");

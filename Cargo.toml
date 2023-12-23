@@ -1,6 +1,6 @@
 [package]
 name = "chip8"
-description = "Chip-8 Interpreter
+description = "Chip-8 Interpreter"
 authors = ["Michael Rivnak <rivnakm1@gmail.com>"]
 version = "0.1.0"
 edition = "2021"
