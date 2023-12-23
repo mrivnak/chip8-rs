@@ -1,0 +1,1 @@
+pub type SoundTimer = u8;

@@ -1,9 +1,0 @@
-[package]
-name = "libchip8"
-description = "Chip-8 Processing Library"
-authors = ["Michael Rivnak <rivnakm1@gmail.com>"]
-version = "0.1.0"
-edition = "2021"
-rust-version = "1.62.1"
-
-[dependencies]

@@ -18,17 +18,17 @@ At the moment chip8.rs only supports running from the command line
 
 ```sh
 # Linux/macOS
-./chip8-rs <ROM>
+./chip8 <ROM>
 
 # Windows
-.\chip8-rs.exe <ROM>
+.\chip8.exe <ROM>
 ```
 
 ## Development
 
 ### Dependencies
 
-- Rust >= 1.62.1
+- Rust
 
 ### Building
 

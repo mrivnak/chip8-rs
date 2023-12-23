@@ -13,3 +13,7 @@ Cargo.lock
 *.code-workspace
 .vscode/*
 !.vscode/extensions.json
+
+# Roms
+*.ch8
+res/test
