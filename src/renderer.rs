@@ -1,81 +1,73 @@
 use tracing::info;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-use wgpu::{InstanceDescriptor, SurfaceConfiguration};
+use wgpu::{RenderPassDescriptor};
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-use crate::PIXEL_SIZE;
 use chip8::gpu::{Pixel, DISPLAY_HEIGHT, DISPLAY_WIDTH};
+
+pub const PIXEL_SIZE: usize = 10;
 
 pub struct Renderer {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    size: PhysicalSize<u32>,
+    pub size: PhysicalSize<u32>,
     // render_pipeline: wgpu::RenderPipeline,
-    window: Window,
 }
 
 impl Renderer {
-    pub async fn new(window: Window) -> Self {
+    pub async fn new(window: &Window) -> Self {
         // TODO: figure out why window.inner_size is 0 in wasm
         let size = LogicalSize::new(
             DISPLAY_WIDTH as u32 * PIXEL_SIZE as u32,
             DISPLAY_HEIGHT as u32 * PIXEL_SIZE as u32,
         );
 
+        let size = window.inner_size();
+
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 +
         // Browser WebGPU
-        let instance = wgpu::Instance::new(InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            ..InstanceDescriptor::default()
-        });
-        let surface = unsafe {
-            instance
-                .create_surface(&window)
-                .expect("Unable to create surface")
-        };
+        let instance =
+            wgpu::Instance::new(wgpu::Backends::all());
+        let surface =
+            unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference:
+                wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
             .await
             .unwrap();
 
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
-                    // WebGL doesn't support all of wgpu's features, so if
-                    // we're building for the web we'll have to disable some.
-                    limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    },
-                    label: None,
+        let (device, queue) = adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                features: wgpu::Features::empty(),
+                // WebGL doesn't support all of wgpu's features, so if
+                // we're building for the web we'll have to disable some.
+                limits: if cfg!(target_arch = "wasm32") {
+                    wgpu::Limits::downlevel_webgl2_defaults()
+                } else {
+                    wgpu::Limits::default()
                 },
-                None, // Trace path
-            )
-            .await
-            .unwrap();
+                label: None,
+            },
+            None, // Trace path
+        ).await.unwrap();
 
-        let default_config = surface
-            .get_default_config(&adapter, size.width, size.height)
-            .expect("Unable to get default config");
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: default_config.format,
+            format: surface.get_supported_formats(&adapter)
+                [0],
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
-            ..default_config
         };
         surface.configure(&device, &config);
         Self {
@@ -83,28 +75,74 @@ impl Renderer {
             device,
             queue,
             config,
-            size: size.to_physical(window.scale_factor()),
-            window,
+            size,
         }
     }
 
-    pub fn window(&self) -> &Window {
-        &self.window
+    pub fn input(&mut self, event: &WindowEvent) -> bool {
+        false
+        // TODO: handle input
     }
 
-    fn resize(&mut self, new_size: PhysicalSize<u32>) {
-        todo!()
+    pub fn update(&mut self) {
+        // todo!()
     }
 
-    fn input(&mut self, event: &WindowEvent) -> bool {
-        todo!()
+    pub fn resize(
+        &mut self,
+        new_size: winit::dpi::PhysicalSize<u32>,
+    ) {
+        if new_size.width > 0 && new_size.height > 0 {
+            self.size = new_size;
+            self.config.width = new_size.width;
+            self.config.height = new_size.height;
+            self.surface
+                .configure(&self.device, &self.config);
+        }
     }
 
-    fn update(&mut self) {
-        todo!()
-    }
+    pub fn render(&mut self, pixels: &[Pixel]) -> Result<(), wgpu::SurfaceError> {
+        let output = self.surface.get_current_texture()?;
+        let view = output.texture.create_view(
+            &wgpu::TextureViewDescriptor::default(),
+        );
+        let mut encoder =
+            self.device.create_command_encoder(
+                &wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                },
+            );
+        {
+            let _render_pass = encoder.begin_render_pass(
+                &wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[Some(
+                        wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(
+                                    wgpu::Color {
+                                        r: 0.1,
+                                        g: 0.2,
+                                        b: 0.3,
+                                        a: 1.0,
+                                    },
+                                ),
+                                store: true,
+                            },
+                        },
+                    )],
+                    depth_stencil_attachment: None,
+                },
+            );
+        }
 
-    fn render(&mut self, pixels: &[Pixel]) -> Result<(), wgpu::SurfaceError> {
-        todo!()
+        // submit will accept anything that implements IntoIter
+        self.queue
+            .submit(std::iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
     }
 }

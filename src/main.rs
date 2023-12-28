@@ -6,14 +6,13 @@ use tracing::{error, info, warn};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::dpi::LogicalSize;
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::EventLoop;
+use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
 use chip8::cpu::CPU;
 use chip8::gpu::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
-
-const PIXEL_SIZE: usize = 10;
+use crate::renderer::PIXEL_SIZE;
 
 mod renderer;
 
@@ -85,7 +84,7 @@ pub async fn run() {
     cpu.load_rom(rom);
 
     // Create window
-    let event_loop = EventLoop::new().expect("Could not create event loop");
+    let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("Chip8")
         .with_inner_size(LogicalSize::new(
@@ -102,32 +101,68 @@ pub async fn run() {
             .and_then(|win| win.document())
             .and_then(|doc| {
                 let dst = doc.get_element_by_id("wasm-example")?;
-                let canvas = web_sys::Element::from(window.canvas().unwrap());
+                let canvas = web_sys::Element::from(window.canvas());
                 dst.append_child(&canvas).ok()?;
                 Some(())
             })
             .expect("Couldn't append canvas to div.");
     }
 
-    let mut renderer = renderer::Renderer::new(window).await;
+    let mut state = renderer::Renderer::new(&window).await;
 
     // Main loop
-    // let _ = event_loop.run(move |event, event_target| {
-    //     // cpu.tick(); // TODO: tick at 1 MHz
-    //     // Does the cpu need to be in a separate thread so the main loop doesn't need to be that fast
-    //     // Can we send signals between threads to synchronize?
-    //
-    //     let pixels = cpu.pixels();
-    //
-    //     // TODO: set renderer to only draw when pixels change, "mailbox"
-    //     // TODO: maybe set a flag when pixels change to avoid redraws
-    //
-    //     match event {
-    //         Event::WindowEvent { event, .. } => match event {
-    //             WindowEvent::CloseRequested => event_target.exit(),
-    //             _ => (),
-    //         },
-    //         _ => (),
-    //     }
-    // });
+    let _ = event_loop.run(move |event, _, control_flow| {
+        // cpu.tick(); // TODO: tick at 1 MHz
+        // Does the cpu need to be in a separate thread so the main loop doesn't need to be that fast
+        // Can we send signals between threads to synchronize?
+
+        let pixels = cpu.pixels();
+
+        // TODO: maybe set a flag when pixels change to avoid redraws
+
+        match event {
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == window.id() => if !state.input(event) {
+                match event {
+                    WindowEvent::CloseRequested
+                    | WindowEvent::KeyboardInput {
+                        input:
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
+                        ..
+                    } => *control_flow = ControlFlow::Exit,
+                    WindowEvent::Resized(physical_size) => {
+                        state.resize(*physical_size);
+                    }
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        // new_inner_size is &&mut so we have to dereference it twice
+                        state.resize(**new_inner_size);
+                    }
+                    _ => {}
+                }},
+            Event::RedrawRequested(window_id) if window_id == window.id() => {
+                state.update();
+                match state.render(pixels) {
+                    Ok(_) => {}
+                    // Reconfigure the surface if lost
+                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                    // The system is out of memory, we should probably quit
+                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    // All other errors (Outdated, Timeout) should be resolved by the next frame
+                    Err(e) => eprintln!("{:?}", e),
+                }
+            }
+            Event::MainEventsCleared => {
+                // RedrawRequested will only trigger once, unless we manually
+                // request it.
+                window.request_redraw();
+            }
+            _ => {}
+        }
+    });
 }
