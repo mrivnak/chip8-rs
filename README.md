@@ -2,7 +2,7 @@
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/mrivnak/chip8-rs/check.yml)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/mrivnak/chip8-rs/test.yml?label=tests)
-[![Coverage Status](https://coveralls.io/repos/github/mrivnak/chip8-rs/badge.svg?branch=main)](https://coveralls.io/github/mrivnak/chip8-rs?branch=main)
+[![Coverage Status](https://coveralls.io/repos/github/mrivnak/chip8-rs/badge.svg?branch=develop)](https://coveralls.io/github/mrivnak/chip8-rs?branch=develop)
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/mrivnak/chip8-rs?display_name=tag&sort=semver)
 
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
