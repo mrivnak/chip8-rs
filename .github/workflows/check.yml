@@ -26,5 +26,7 @@ jobs:
 
       - name: Cargo Check
         run: |
+          mkdir -p res/roms
+          touch res/roms/pong.ch8 # empty file to prevent error
           cargo check
           cargo check --target wasm32-unknown-unknown
