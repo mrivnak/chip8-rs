@@ -12,6 +12,9 @@
 
 Chip-8 emulator written in Rust
 
+> Obligatory note: Technically, this is a chip-8 interpreter, not an emulator. Emulators emulate physical hardware, but
+> there is no physical chip-8 hardware, thus, this is an interpreter, technically...
+
 ## Getting Started
 
 At the moment chip8.rs only supports running from the command line

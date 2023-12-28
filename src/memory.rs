@@ -1,6 +1,7 @@
 use super::data::Address;
 
 const MEMORY_SIZE: usize = 0x1000;
+pub const PROGRAM_START: Address = 0x200;
 
 pub struct MemoryBus {
     memory: [u8; MEMORY_SIZE],
@@ -17,6 +18,12 @@ impl Default for MemoryBus {
 impl MemoryBus {
     pub fn write(&mut self, addr: Address, data: u8) {
         self.memory[addr as usize] = data;
+    }
+
+    pub fn write_bytes(&mut self, addr: Address, data: &[u8]) {
+        for (i, byte) in data.iter().enumerate() {
+            self.write(addr + i as Address, *byte);
+        }
     }
 
     pub fn read(&self, addr: Address) -> u8 {
@@ -40,6 +47,19 @@ mod tests {
                 mem.write(*addr, *val);
                 assert_eq!(*val, mem.memory[*addr as usize])
             }
+        }
+    }
+
+    #[test]
+    fn test_write_bytes() {
+        let mut mem = MemoryBus::default();
+
+        let addr: Address = 0x000;
+        let values = [0x0F, 0xF0, 0xAA];
+
+        mem.write_bytes(addr, &values);
+        for (i, val) in values.iter().enumerate() {
+            assert_eq!(*val, mem.memory[addr as usize + i])
         }
     }
 

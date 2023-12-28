@@ -19,4 +19,6 @@ jobs:
           toolchain: stable
 
       - name: Cargo Check
-        run: cargo check
+        run: |
+          cargo check
+          cargo check --target wasm32-unknown-unknown
