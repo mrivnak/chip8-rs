@@ -18,6 +18,12 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Install Rust wasm32-unknown-unknown
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+
       - name: Cargo Check
         run: |
           cargo check
