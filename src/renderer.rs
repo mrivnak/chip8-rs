@@ -1,8 +1,5 @@
-use tracing::info;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-use wgpu::{RenderPassDescriptor};
-use winit::dpi::{LogicalSize, PhysicalSize};
+use wgpu::{InstanceDescriptor, RenderPassDescriptor, StoreOp};
+use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
@@ -22,20 +19,21 @@ pub struct Renderer {
 impl Renderer {
     pub async fn new(window: &Window) -> Self {
         // TODO: figure out why window.inner_size is 0 in wasm
-        let size = LogicalSize::new(
+        let size = PhysicalSize::new(
             DISPLAY_WIDTH as u32 * PIXEL_SIZE as u32,
             DISPLAY_HEIGHT as u32 * PIXEL_SIZE as u32,
         );
-
-        let size = window.inner_size();
 
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 +
         // Browser WebGPU
         let instance =
-            wgpu::Instance::new(wgpu::Backends::all());
+            wgpu::Instance::new(InstanceDescriptor {
+                backends: wgpu::Backends::all(),
+                ..InstanceDescriptor::default()
+            });
         let surface =
-            unsafe { instance.create_surface(window) };
+            unsafe { instance.create_surface(window).expect("Unable to create surface") };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference:
@@ -61,13 +59,16 @@ impl Renderer {
             None, // Trace path
         ).await.unwrap();
 
+        let capabilities = surface.get_capabilities(&adapter);
+        let format = capabilities.formats.first().expect("No surface formats available").to_owned();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_supported_formats(&adapter)
-                [0],
+            format,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+            view_formats: vec![format],
         };
         surface.configure(&device, &config);
         Self {
@@ -90,7 +91,7 @@ impl Renderer {
 
     pub fn resize(
         &mut self,
-        new_size: winit::dpi::PhysicalSize<u32>,
+        new_size: PhysicalSize<u32>,
     ) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
@@ -114,7 +115,7 @@ impl Renderer {
             );
         {
             let _render_pass = encoder.begin_render_pass(
-                &wgpu::RenderPassDescriptor {
+                &RenderPassDescriptor {
                     label: Some("Render Pass"),
                     color_attachments: &[Some(
                         wgpu::RenderPassColorAttachment {
@@ -129,11 +130,13 @@ impl Renderer {
                                         a: 1.0,
                                     },
                                 ),
-                                store: true,
+                                store: StoreOp::Store,
                             },
                         },
                     )],
                     depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
                 },
             );
         }
