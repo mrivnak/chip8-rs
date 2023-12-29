@@ -2,35 +2,10 @@ pub const DISPLAY_HEIGHT: usize = 32;
 pub const DISPLAY_WIDTH: usize = 64;
 pub const DISPLAY_SIZE: usize = DISPLAY_HEIGHT * DISPLAY_WIDTH;
 
-const PIXEL_COLOR_ON: (u8, u8, u8, u8) = (0xFF, 0xFF, 0xFF, 0xFF);
-const PIXEL_COLOR_OFF: (u8, u8, u8, u8) = (0x00, 0x00, 0x00, 0xFF);
-
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Pixel {
     On,
     Off,
-}
-
-impl From<Pixel> for (u8, u8, u8, u8) {
-    fn from(pixel: Pixel) -> Self {
-        match pixel {
-            Pixel::On => PIXEL_COLOR_ON,
-            Pixel::Off => PIXEL_COLOR_OFF,
-        }
-    }
-}
-
-#[cfg(feature = "wgpu")]
-impl From<Pixel> for wgpu::Color {
-    fn from(pixel: Pixel) -> Self {
-        let (r, g, b, a) = pixel.into();
-        Self {
-            r: r as f64 / 255.0,
-            g: g as f64 / 255.0,
-            b: b as f64 / 255.0,
-            a: a as f64 / 255.0,
-        }
-    }
 }
 
 pub struct Display {

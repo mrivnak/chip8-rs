@@ -7,6 +7,20 @@ use chip8::gpu::{Pixel, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 pub const PIXEL_SIZE: usize = 10;
 
+const PIXEL_ON_COLOR: wgpu::Color = wgpu::Color {
+    r: 1.0,
+    g: 1.0,
+    b: 1.0,
+    a: 1.0,
+};
+
+const PIXEL_OFF_COLOR: wgpu::Color = wgpu::Color {
+    r: 0.0,
+    g: 0.0,
+    b: 0.0,
+    a: 1.0,
+};
+
 pub struct Renderer {
     surface: wgpu::Surface,
     device: wgpu::Device,
