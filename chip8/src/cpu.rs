@@ -30,7 +30,7 @@ impl CPU {
         let mut cpu = CPU::default();
 
         // Load font into memory
-        let font_rom = include_bytes!("../res/font.bin");
+        let font_rom = include_bytes!("../../res/font.bin");
         const FONT_START: Address = 0x50; // Arbitrary, but it's convention to start at 0x50
         cpu.memory.write_bytes(FONT_START, font_rom);
 
@@ -45,7 +45,14 @@ impl CPU {
         &self.display.pixels
     }
 
-    pub fn tick(&mut self) {
+    pub fn run(&mut self) {
+        // TODO: tick in a separate thread at 1 MHz
+        // loop {
+        //     self.tick();
+        // }
+    }
+
+    fn tick(&mut self) {
         // TODO: Implement tick
 
         let instr = self.fetch();

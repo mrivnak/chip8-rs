@@ -20,6 +20,19 @@ impl From<Pixel> for (u8, u8, u8, u8) {
     }
 }
 
+#[cfg(feature = "wgpu")]
+impl From<Pixel> for wgpu::Color {
+    fn from(pixel: Pixel) -> Self {
+        let (r, g, b, a) = pixel.into();
+        Self {
+            r: r as f64 / 255.0,
+            g: g as f64 / 255.0,
+            b: b as f64 / 255.0,
+            a: a as f64 / 255.0,
+        }
+    }
+}
+
 pub struct Display {
     pub pixels: [Pixel; DISPLAY_SIZE],
 }

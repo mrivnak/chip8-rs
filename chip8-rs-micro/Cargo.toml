@@ -1,0 +1,10 @@
+[package]
+name = "chip8-rs-micro"
+description = "Chip-8 Interpreter for the RetroFlag GPI Case 2, with a Raspberry Pi Zero 2 W"
+authors = ["Michael Rivnak <rivnakm1@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]

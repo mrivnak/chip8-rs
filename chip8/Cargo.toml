@@ -1,0 +1,13 @@
+[package]
+name = "chip8"
+description = "Chip-8 Interpreter"
+authors = ["Michael Rivnak <rivnakm1@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+wgpu = ["dep:wgpu"]
+
+[dependencies]
+wgpu = { version = "0.18.0", optional = true, default-features = false }

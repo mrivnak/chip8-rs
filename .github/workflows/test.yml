@@ -16,5 +16,8 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Cargo Test
-        run: cargo test
+      - name: Install Just
+        uses: extractions/setup-just@v1
+
+      - name: Run Tests
+        run: just test

@@ -24,9 +24,17 @@ jobs:
           toolchain: stable
           target: wasm32-unknown-unknown
 
+      - name: Install Rust armv7a-none-eabi
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: armv7a-none-eabi
+
+      - name: Install Just
+        uses: extractions/setup-just@v1
+
       - name: Cargo Check
         run: |
           mkdir -p res/roms
           touch res/roms/pong.ch8 # empty file to prevent error
-          cargo check
-          cargo check --target wasm32-unknown-unknown
+          just check
