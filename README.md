@@ -15,7 +15,7 @@ Chip-8 emulator written in Rust
 > Obligatory note: Technically, this is a chip-8 interpreter, not an emulator. Emulators emulate physical hardware, but
 > there is no physical chip-8 hardware, thus, this is an interpreter, technically...
 
-## Getting Started [Desktop]
+## Getting Started
 
 At the moment chip8.rs only supports running from the command line
 
@@ -47,28 +47,3 @@ cargo build
 cargo run -- <ROM>
 ```
 
-## Gettings Started [RetroFlag GPI Case 2]
-
-> This is a work in progress
-
-This project is designed to run on the [RetroFlag GPI Case 2](https://retroflag.com/GPi-CASE2.html) using a Raspberry Pi
-Zero 2 W. The following instructions are for setting up the device to run chip8.rs.
-
-### Dependencies
-
-- Rust
-- Rustup
-
-### Building
-
-```sh
-# first, install the armv7a toolchain
-rustup target add armv7a-none-eabi
-
-# then, build the project
-cargo build --workspace --bin chip8-rs-micro --release --target armv7a-none-eabi
-```
-
-### Running
-
-TODO: Add instructions for flashing sd card, etc.

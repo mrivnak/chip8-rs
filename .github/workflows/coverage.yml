@@ -30,5 +30,4 @@ jobs:
           --follow-exec \
           --post-test-delay 10 \
           --coveralls ${{ secrets.COVERALLS_TOKEN }} \
-          --workspace \
-          --exclude chip8-rs-micro
+          --workspace
