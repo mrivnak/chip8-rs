@@ -12,6 +12,7 @@ use crate::renderer::DEFAULT_PIXEL_SIZE;
 use chip8::cpu::CPU;
 use chip8::gpu::{DISPLAY_HEIGHT, DISPLAY_WIDTH, Pixel};
 
+mod data;
 mod renderer;
 
 #[cfg(not(target_arch = "wasm32"))]
