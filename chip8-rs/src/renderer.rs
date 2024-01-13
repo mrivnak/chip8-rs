@@ -1,11 +1,11 @@
-use wgpu::{include_wgsl, InstanceDescriptor, RenderPassDescriptor, StoreOp};
 use wgpu::util::DeviceExt;
+use wgpu::{include_wgsl, InstanceDescriptor, RenderPassDescriptor, StoreOp};
 use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-use chip8::gpu::Pixel;
 use crate::data::{Color, Point};
+use chip8::gpu::Pixel;
 
 pub const DEFAULT_PIXEL_SIZE: usize = 10;
 
@@ -33,8 +33,6 @@ impl PixelGridSize {
         self.width * self.height
     }
 }
-
-
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -153,23 +151,23 @@ impl PixelRenderer {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[
-                    Vertex::desc(),
-                ],
+                buffers: &[Vertex::desc()],
             },
-            fragment: Some(wgpu::FragmentState { // 3.
+            fragment: Some(wgpu::FragmentState {
+                // 3.
                 module: &shader,
                 entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState { // 4.
+                targets: &[Some(wgpu::ColorTargetState {
+                    // 4.
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw, // 2.
+                front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
                 // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
@@ -178,13 +176,13 @@ impl PixelRenderer {
                 // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
-            depth_stencil: None, // 1.
+            depth_stencil: None,
             multisample: wgpu::MultisampleState {
-                count: 1, // 2.
-                mask: !0, // 3.
-                alpha_to_coverage_enabled: false, // 4.
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
             },
-            multiview: None, // 5.
+            multiview: None,
         });
 
         Self {
@@ -193,10 +191,7 @@ impl PixelRenderer {
             queue,
             config,
             size,
-            pixel_grid_size: PixelGridSize {
-                width,
-                height,
-            },
+            pixel_grid_size: PixelGridSize { width, height },
             render_pipeline,
             vertex_buffer,
         }
@@ -261,8 +256,11 @@ impl PixelRenderer {
         Ok(())
     }
 
-
-    fn create_pixel_vertices(&self, pixels: &[Pixel], pixel_grid_size: &PixelGridSize) -> Vec<Vertex> {
+    fn create_pixel_vertices(
+        &self,
+        pixels: &[Pixel],
+        pixel_grid_size: &PixelGridSize,
+    ) -> Vec<Vertex> {
         debug_assert_eq!(pixels.len(), pixel_grid_size.size());
         // TODO: only render pixels in a field with the same aspect ratio as the grid, if the window is a different aspect ratio
 
@@ -278,10 +276,7 @@ impl PixelRenderer {
                 match pixel {
                     Pixel::On => {
                         let pixel_vertices = build_pixel_vertices(
-                            Point {
-                                x,
-                                y,
-                            },
+                            Point { x, y },
                             pixel_width,
                             pixel_height,
                             PIXEL_ON_COLOR,
@@ -292,10 +287,13 @@ impl PixelRenderer {
                 };
             }
         }
-        let vertices = vertices.iter().map(|v| Vertex {
-            position: polar_to_ndc(&self.size, v.position.into()).into(),
-            color: v.color,
-        }).collect::<Vec<_>>();
+        let vertices = vertices
+            .iter()
+            .map(|v| Vertex {
+                position: polar_to_ndc(&self.size, v.position.into()).into(),
+                color: v.color,
+            })
+            .collect::<Vec<_>>();
 
         debug_assert_eq!(vertices.len(), pixel_grid_size.size() * 4);
 
@@ -333,12 +331,7 @@ fn build_pixel_vertices(point: Point<f32>, x_size: f32, y_size: f32, color: Colo
         color: color.into(),
     };
 
-    [
-        top_left,
-        top_right,
-        bottom_left,
-        bottom_right,
-    ]
+    [top_left, top_right, bottom_left, bottom_right]
 }
 
 #[inline]
@@ -351,10 +344,7 @@ fn polar_to_ndc(size: &PhysicalSize<u32>, polar: Point<f32>) -> Point<f32> {
     let x = x * 2.0 - 1.0;
     let y = y * 2.0 - 1.0;
 
-    Point {
-        x,
-        y,
-    }
+    Point { x, y }
 }
 
 #[cfg(test)]

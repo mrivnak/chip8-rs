@@ -18,5 +18,3 @@ fn main() {
 async fn run_wasm() {
     run().await;
 }
-
-

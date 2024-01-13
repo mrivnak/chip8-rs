@@ -10,7 +10,7 @@ use winit::window::WindowBuilder;
 
 use crate::renderer::DEFAULT_PIXEL_SIZE;
 use chip8::cpu::CPU;
-use chip8::gpu::{DISPLAY_HEIGHT, DISPLAY_WIDTH, Pixel};
+use chip8::gpu::{Pixel, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 mod data;
 mod renderer;
@@ -127,12 +127,16 @@ pub async fn run() {
                     use winit::event::WindowEvent;
 
                     match event {
-                        WindowEvent::KeyboardInput { device_id: _, event: key_event, is_synthetic: _ } => {
+                        WindowEvent::KeyboardInput {
+                            device_id: _,
+                            event: key_event,
+                            is_synthetic: _,
+                        } => {
                             use winit::event::ElementState;
 
                             match key_event.state {
                                 ElementState::Pressed => todo!(),
-                                ElementState::Released => todo!()
+                                ElementState::Released => todo!(),
                             }
                         }
                         WindowEvent::CloseRequested => event_target.exit(),
