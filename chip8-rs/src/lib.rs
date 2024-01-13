@@ -8,7 +8,7 @@ use winit::event::Event;
 use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
-use crate::renderer::PIXEL_SIZE;
+use crate::renderer::DEFAULT_PIXEL_SIZE;
 use chip8::cpu::CPU;
 use chip8::gpu::{DISPLAY_HEIGHT, DISPLAY_WIDTH, Pixel};
 
@@ -33,12 +33,17 @@ struct Args {
 
 pub async fn run() {
     cfg_if::cfg_if! {
-        if #[cfg(target_arch = "wasm32")] {
-            console_error_panic_hook::set_once();
-            tracing_wasm::set_as_global_default();
-        } else {
-            tracing_subscriber::fmt::init();
+        if #[cfg(debug_assertions)] {
+            cfg_if::cfg_if! {
+                if #[cfg(target_arch = "wasm30")] {
+                    console_error_panic_hook::set_once();
+                    tracing_wasm::set_as_global_default();
+                } else {
+                    tracing_subscriber::fmt::init();
+                }
+            }
         }
+
     }
 
     let mut rom: &[u8] = &[];
@@ -71,8 +76,8 @@ pub async fn run() {
     let window = WindowBuilder::new()
         .with_title("Chip8")
         .with_inner_size(LogicalSize::new(
-            (DISPLAY_WIDTH * PIXEL_SIZE) as f64,
-            (DISPLAY_HEIGHT * PIXEL_SIZE) as f64,
+            (DISPLAY_WIDTH * DEFAULT_PIXEL_SIZE) as f64,
+            (DISPLAY_HEIGHT * DEFAULT_PIXEL_SIZE) as f64,
         ))
         .build(&event_loop)
         .expect("Could not create window");
@@ -91,7 +96,7 @@ pub async fn run() {
             .expect("Couldn't append canvas to div.");
     }
 
-    let mut renderer = renderer::Renderer::new(&window).await;
+    let mut renderer = renderer::PixelRenderer::new(&window, DISPLAY_HEIGHT, DISPLAY_WIDTH).await;
 
     // Run CPU
     cpu.run();
@@ -117,7 +122,6 @@ pub async fn run() {
                 ref event,
                 window_id,
             } if window_id == window.id() => {
-
                 if !renderer.input(event) {
                     use winit::event::WindowEvent;
 
