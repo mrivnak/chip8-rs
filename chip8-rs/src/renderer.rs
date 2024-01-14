@@ -64,7 +64,6 @@ pub struct PixelRenderer {
     pub size: PhysicalSize<u32>,
     pixel_grid_size: PixelGridSize,
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
 }
 
 impl PixelRenderer {
@@ -130,12 +129,6 @@ impl PixelRenderer {
         };
         surface.configure(&device, &config);
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice::<Vertex, u8>(&[]),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
         let shader = device.create_shader_module(include_wgsl!("../shaders/shader.wgsl"));
 
         let render_pipeline_layout =
@@ -193,7 +186,6 @@ impl PixelRenderer {
             size,
             pixel_grid_size: PixelGridSize { width, height },
             render_pipeline,
-            vertex_buffer,
         }
     }
 
@@ -218,7 +210,28 @@ impl PixelRenderer {
     pub fn render(&mut self, pixels: &[Pixel]) -> Result<(), wgpu::SurfaceError> {
         debug_assert_eq!(pixels.len(), self.pixel_grid_size.size());
 
-        let pixel_vertices = self.create_pixel_vertices(pixels, &self.pixel_grid_size);
+        let pixel_vertices = create_pixel_vertices(
+            self.size.height,
+            self.size.width,
+            pixels,
+            &self.pixel_grid_size,
+        );
+        let vertex_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&pixel_vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+        let pixel_indices = create_pixel_indices(pixels, &self.pixel_grid_size);
+        let index_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&pixel_indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
         let output = self.surface.get_current_texture()?;
         let view = output
@@ -245,7 +258,8 @@ impl PixelRenderer {
                 occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw(0..(pixel_vertices.len() as u32), 0..1);
         }
 
@@ -255,59 +269,83 @@ impl PixelRenderer {
 
         Ok(())
     }
+}
 
-    fn create_pixel_vertices(
-        &self,
-        pixels: &[Pixel],
-        pixel_grid_size: &PixelGridSize,
-    ) -> Vec<Vertex> {
-        debug_assert_eq!(pixels.len(), pixel_grid_size.size());
-        // TODO: only render pixels in a field with the same aspect ratio as the grid, if the window is a different aspect ratio
+fn create_pixel_vertices(
+    height: u32,
+    width: u32,
+    pixels: &[Pixel],
+    pixel_grid_size: &PixelGridSize,
+) -> Vec<Vertex> {
+    debug_assert_eq!(pixels.len(), pixel_grid_size.size());
+    // TODO: only render pixels in a field with the same aspect ratio as the grid, if the window is a different aspect ratio
 
-        let pixel_height = self.size.height as f32 / pixel_grid_size.height as f32;
-        let pixel_width = self.size.width as f32 / pixel_grid_size.width as f32;
+    let pixel_height = height as f32 / pixel_grid_size.height as f32;
+    let pixel_width = width as f32 / pixel_grid_size.width as f32;
 
-        let mut vertices = Vec::with_capacity(pixels.len() * 6);
-        for j in 0..pixel_grid_size.height {
-            for i in 0..pixel_grid_size.width {
-                let pixel = pixels[j * pixel_grid_size.width + i];
-                let x = i as f32 * pixel_width;
-                let y = j as f32 * pixel_height;
-                match pixel {
-                    Pixel::On => {
-                        let pixel_vertices = build_pixel_vertices(
-                            Point { x, y },
-                            pixel_width,
-                            pixel_height,
-                            PIXEL_ON_COLOR,
-                        );
-                        vertices.extend_from_slice(&pixel_vertices);
-                    }
-                    Pixel::Off => (),
-                };
-            }
+    let mut vertices = Vec::with_capacity(pixels.len() * 6);
+    for j in 0..pixel_grid_size.height {
+        for i in 0..pixel_grid_size.width {
+            let pixel = pixels[j * pixel_grid_size.width + i];
+            let x = i as f32 * pixel_width;
+            let y = j as f32 * pixel_height;
+            match pixel {
+                Pixel::On => {
+                    let pixel_vertices = build_pixel_vertices(
+                        Point { x, y },
+                        pixel_width,
+                        pixel_height,
+                        PIXEL_ON_COLOR,
+                    );
+                    vertices.extend_from_slice(&pixel_vertices);
+                }
+                Pixel::Off => (),
+            };
         }
-        let vertices = vertices
+    }
+    let vertices = vertices
+        .iter()
+        .map(|v| Vertex {
+            position: polar_to_ndc(&PhysicalSize::new(width, height), v.position.into()).into(),
+            color: v.color,
+        })
+        .collect::<Vec<_>>();
+
+    debug_assert_eq!(
+        vertices.len(),
+        pixels
             .iter()
-            .map(|v| Vertex {
-                position: polar_to_ndc(&self.size, v.position.into()).into(),
-                color: v.color,
-            })
-            .collect::<Vec<_>>();
+            .filter(|&p| matches!(p, Pixel::On))
+            .collect::<Vec<_>>()
+            .len()
+            * 4
+    );
 
-        debug_assert_eq!(vertices.len(), pixel_grid_size.size() * 4);
+    vertices
+}
 
-        vertices
+fn create_pixel_indices(pixels: &[Pixel], pixel_grid_size: &PixelGridSize) -> Vec<u32> {
+    debug_assert_eq!(pixels.len(), pixel_grid_size.size());
+    let on_pixels = pixels.into_iter().filter(|&p| matches!(p, Pixel::On));
+
+    let mut indices = Vec::with_capacity(pixels.len() * 6);
+    for (i, _) in on_pixels.enumerate() {
+        let i = i as u32;
+        let i = i * 4; // 4 vertices per pixel
+        indices.extend_from_slice(&[i, i + 2, i + 1, i + 3, i + 1, i + 2]);
     }
 
-    fn create_pixel_indices(&self, pixels: &[Pixel], pixel_grid_size: &PixelGridSize) -> Vec<u32> {
-        debug_assert_eq!(pixels.len(), pixel_grid_size.size());
+    debug_assert_eq!(
+        indices.len(),
+        pixels
+            .iter()
+            .filter(|&p| matches!(p, Pixel::On))
+            .collect::<Vec<_>>()
+            .len()
+            * 6
+    );
 
-        let mut indices = Vec::with_capacity(pixels.len() * 6);
-        debug_assert_eq!(indices.len(), pixel_grid_size.size() * 6);
-
-        indices
-    }
+    indices
 }
 
 fn build_pixel_vertices(point: Point<f32>, x_size: f32, y_size: f32, color: Color) -> [Vertex; 4] {
@@ -352,7 +390,7 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(10, 10, Point { x: 0.0, y: 0.0 }, Point { x: -1.0, y: -1.0 })]
+    #[test_case(10, 10, Point { x: 0.0, y: 0.0 }, Point { x: - 1.0, y: - 1.0 })]
     #[test_case(10, 10, Point { x: 10.0, y: 10.0 }, Point { x: 1.0, y: 1.0 })]
     #[test_case(10, 10, Point { x: 5.0, y: 5.0 }, Point { x: 0.0, y: 0.0 })]
     #[test_case(10, 20, Point { x: 5.0, y: 10.0 }, Point { x: 0.0, y: 0.0 })]
@@ -361,5 +399,171 @@ mod tests {
         let size = PhysicalSize::new(width, height);
         let actual = polar_to_ndc(&size, point);
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_build_pixel_vertices() {
+        let point = Point { x: 0.0, y: 0.0 };
+        let x_size = 1.0;
+        let y_size = 1.0;
+        let color = Color {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        };
+        let vertices = build_pixel_vertices(point, x_size, y_size, color);
+        assert_eq!(vertices.len(), 4);
+        assert_eq!(vertices[0].position, [0.0, 0.0]);
+        assert_eq!(vertices[1].position, [1.0, 0.0]);
+        assert_eq!(vertices[2].position, [0.0, 1.0]);
+        assert_eq!(vertices[3].position, [1.0, 1.0]);
+        assert_eq!(vertices[0].color, [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(vertices[1].color, [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(vertices[2].color, [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(vertices[3].color, [1.0, 1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_create_pixel_vertices_internal() {
+        let height: u32 = 2;
+        let width: u32 = 2;
+        let pixels = vec![Pixel::On; (height * width) as usize];
+        let pixel_grid_size = PixelGridSize {
+            height: height as usize,
+            width: width as usize,
+        };
+
+        let vertices = create_pixel_vertices(height, width, &pixels, &pixel_grid_size);
+
+        assert_eq!(vertices.len(), (4 * height * width) as usize);
+
+        assert_eq!(vertices[0].position, [-1.0, -1.0]);
+        assert_eq!(vertices[1].position, [0.0, -1.0]);
+        assert_eq!(vertices[2].position, [-1.0, 0.0]);
+        assert_eq!(vertices[3].position, [0.0, 0.0]);
+
+        assert_eq!(vertices[4].position, [0.0, -1.0]);
+        assert_eq!(vertices[5].position, [1.0, -1.0]);
+        assert_eq!(vertices[6].position, [0.0, 0.0]);
+        assert_eq!(vertices[7].position, [1.0, 0.0]);
+
+        assert_eq!(vertices[8].position, [-1.0, 0.0]);
+        assert_eq!(vertices[9].position, [0.0, 0.0]);
+        assert_eq!(vertices[10].position, [-1.0, 1.0]);
+        assert_eq!(vertices[11].position, [0.0, 1.0]);
+
+        assert_eq!(vertices[12].position, [0.0, 0.0]);
+        assert_eq!(vertices[13].position, [1.0, 0.0]);
+        assert_eq!(vertices[14].position, [0.0, 1.0]);
+        assert_eq!(vertices[15].position, [1.0, 1.0]);
+
+        let pixels = vec![Pixel::On, Pixel::Off, Pixel::On, Pixel::Off];
+        let vertices = create_pixel_vertices(height, width, &pixels, &pixel_grid_size);
+
+        assert_eq!(vertices.len(), 4 * 2);
+
+        assert_eq!(vertices[0].position, [-1.0, -1.0]);
+        assert_eq!(vertices[1].position, [0.0, -1.0]);
+        assert_eq!(vertices[2].position, [-1.0, 0.0]);
+        assert_eq!(vertices[3].position, [0.0, 0.0]);
+
+        assert_eq!(vertices[4].position, [-1.0, 0.0]);
+        assert_eq!(vertices[5].position, [0.0, 0.0]);
+        assert_eq!(vertices[6].position, [-1.0, 1.0]);
+        assert_eq!(vertices[7].position, [0.0, 1.0]);
+
+        let pixels = vec![Pixel::On, Pixel::On, Pixel::Off, Pixel::Off];
+        let vertices = create_pixel_vertices(height, width, &pixels, &pixel_grid_size);
+
+        assert_eq!(vertices.len(), 4 * 2);
+
+        assert_eq!(vertices[0].position, [-1.0, -1.0]);
+        assert_eq!(vertices[1].position, [0.0, -1.0]);
+        assert_eq!(vertices[2].position, [-1.0, 0.0]);
+        assert_eq!(vertices[3].position, [0.0, 0.0]);
+
+        assert_eq!(vertices[4].position, [0.0, -1.0]);
+        assert_eq!(vertices[5].position, [1.0, -1.0]);
+        assert_eq!(vertices[6].position, [0.0, 0.0]);
+        assert_eq!(vertices[7].position, [1.0, 0.0]);
+    }
+
+    #[test]
+    fn test_create_pixel_indices_internal() {
+        let height = 2;
+        let width = 2;
+        let pixels = vec![Pixel::On; height * width];
+        let pixel_grid_size = PixelGridSize { height, width };
+
+        let indices = create_pixel_indices(&pixels, &pixel_grid_size);
+
+        assert_eq!(indices.len(), 6 * height * width);
+
+        assert_eq!(indices[0], 0);
+        assert_eq!(indices[1], 2);
+        assert_eq!(indices[2], 1);
+        assert_eq!(indices[3], 3);
+        assert_eq!(indices[4], 1);
+        assert_eq!(indices[5], 2);
+
+        assert_eq!(indices[6], 4);
+        assert_eq!(indices[7], 6);
+        assert_eq!(indices[8], 5);
+        assert_eq!(indices[9], 7);
+        assert_eq!(indices[10], 5);
+        assert_eq!(indices[11], 6);
+
+        assert_eq!(indices[12], 8);
+        assert_eq!(indices[13], 10);
+        assert_eq!(indices[14], 9);
+        assert_eq!(indices[15], 11);
+        assert_eq!(indices[16], 9);
+        assert_eq!(indices[17], 10);
+
+        assert_eq!(indices[18], 12);
+        assert_eq!(indices[19], 14);
+        assert_eq!(indices[20], 13);
+        assert_eq!(indices[21], 15);
+        assert_eq!(indices[22], 13);
+        assert_eq!(indices[23], 14);
+
+        let pixels = vec![Pixel::On, Pixel::Off, Pixel::On, Pixel::Off];
+        let indices = create_pixel_indices(&pixels, &pixel_grid_size);
+
+        assert_eq!(indices.len(), 6 * 2);
+
+        assert_eq!(indices[0], 0);
+        assert_eq!(indices[1], 2);
+        assert_eq!(indices[2], 1);
+        assert_eq!(indices[3], 3);
+        assert_eq!(indices[4], 1);
+        assert_eq!(indices[5], 2);
+
+        assert_eq!(indices[6], 4);
+        assert_eq!(indices[7], 6);
+        assert_eq!(indices[8], 5);
+        assert_eq!(indices[9], 7);
+        assert_eq!(indices[10], 5);
+        assert_eq!(indices[11], 6);
+
+        let pixels = vec![Pixel::On, Pixel::On, Pixel::Off, Pixel::Off];
+        let indices = create_pixel_indices(&pixels, &pixel_grid_size);
+
+        assert_eq!(indices.len(), 6 * 2);
+
+        assert_eq!(indices[0], 0);
+        assert_eq!(indices[1], 2);
+        assert_eq!(indices[2], 1);
+        assert_eq!(indices[3], 3);
+        assert_eq!(indices[4], 1);
+        assert_eq!(indices[5], 2);
+
+        assert_eq!(indices[6], 4);
+        assert_eq!(indices[7], 6);
+        assert_eq!(indices[8], 5);
+        assert_eq!(indices[9], 7);
+        assert_eq!(indices[10], 5);
+        assert_eq!(indices[11], 6);
     }
 }
