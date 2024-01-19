@@ -69,11 +69,7 @@ pub struct PixelRenderer<'a> {
 
 impl<'a> PixelRenderer<'a> {
     pub async fn new(window: &'a Window, height: usize, width: usize) -> Self {
-        // TODO: figure out why window.inner_size is 0 in wasm
-        let size = PhysicalSize::new(
-            width as u32 * DEFAULT_PIXEL_SIZE as u32,
-            height as u32 * DEFAULT_PIXEL_SIZE as u32,
-        );
+        let size = window.inner_size();
 
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + WebGPU
