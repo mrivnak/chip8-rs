@@ -7,7 +7,7 @@ use winit::window::Window;
 use crate::data::{Color, Point};
 use chip8::gpu::Pixel;
 
-pub const DEFAULT_PIXEL_SIZE: usize = 100;
+pub const DEFAULT_PIXEL_SIZE: usize = 10;
 
 const PIXEL_ON_COLOR: Color = Color {
     r: 1.0,
@@ -56,8 +56,8 @@ impl Vertex {
     }
 }
 
-pub struct PixelRenderer {
-    surface: wgpu::Surface,
+pub struct PixelRenderer<'a> {
+    surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
@@ -67,8 +67,8 @@ pub struct PixelRenderer {
     render_pipeline: wgpu::RenderPipeline,
 }
 
-impl PixelRenderer {
-    pub async fn new(window: &Window, height: usize, width: usize) -> Self {
+impl<'a> PixelRenderer<'a> {
+    pub async fn new(window: &'a Window, height: usize, width: usize) -> Self {
         // TODO: figure out why window.inner_size is 0 in wasm
         let size = PhysicalSize::new(
             width as u32 * DEFAULT_PIXEL_SIZE as u32,
@@ -98,10 +98,10 @@ impl PixelRenderer {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
+                    required_features: wgpu::Features::empty(),
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
-                    limits: if cfg!(target_arch = "wasm32") {
+                    required_limits: if cfg!(target_arch = "wasm32") {
                         wgpu::Limits::downlevel_webgl2_defaults()
                     } else {
                         wgpu::Limits::default()
@@ -125,6 +125,7 @@ impl PixelRenderer {
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: 2,
             alpha_mode: wgpu::CompositeAlphaMode::Opaque,
             view_formats: vec![format],
         };
@@ -219,24 +220,6 @@ impl PixelRenderer {
             self.pixel_size,
             &self.pixel_grid_size,
         );
-        let pixel_vertices = vec![
-            Vertex { // bottom left
-                position: [-0.5, -0.5],
-                color: [1.0, 0.0, 0.0, 0.0],
-            },
-            Vertex { // bottom right
-                position: [0.5, -0.5],
-                color: [0.0, 1.0, 0.0, 0.0],
-            },
-            Vertex { // top left
-                position: [-0.5, 0.5],
-                color: [1.0, 0.0, 0.0, 0.0],
-            },
-            Vertex { // top right
-                position: [0.5, 0.5],
-                color: [0.0, 0.0, 1.0, 0.0],
-            },
-        ];
         let vertex_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -246,7 +229,6 @@ impl PixelRenderer {
             });
 
         let pixel_indices = create_pixel_indices(pixels, &self.pixel_grid_size);
-        let pixel_indices = vec![0, 1, 2, 2, 1, 3];
         let index_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -282,7 +264,7 @@ impl PixelRenderer {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw(0..(pixel_vertices.len() as u32), 0..1);
+            render_pass.draw_indexed(0..pixel_indices.len() as u32, 0, 0..1);
         }
 
         // submit will accept anything that implements IntoIter
@@ -355,18 +337,18 @@ fn create_pixel_indices(pixels: &[Pixel], pixel_grid_size: &PixelGridSize) -> Ve
     for (i, _) in on_pixels.enumerate() {
         let i = i as u32;
         let i = i * 4; // 4 vertices per pixel
-        indices.extend_from_slice(&[i + 0, i + 2, i + 3, i + 0, i + 3, i + 1]);
+        indices.extend_from_slice(&[i + 0, i + 2, i + 1, i + 2, i + 3, i + 1]);
     }
 
-    // debug_assert_eq!(
-    //     indices.len(),
-    //     pixels
-    //         .iter()
-    //         .filter(|&p| matches!(p, Pixel::On))
-    //         .collect::<Vec<_>>()
-    //         .len()
-    //         * 6
-    // );
+    debug_assert_eq!(
+        indices.len(),
+        pixels
+            .iter()
+            .filter(|&p| matches!(p, Pixel::On))
+            .collect::<Vec<_>>()
+            .len()
+            * 6
+    );
 
     indices
 }

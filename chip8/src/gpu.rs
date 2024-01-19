@@ -1,5 +1,5 @@
-pub const DISPLAY_HEIGHT: usize = 3;
-pub const DISPLAY_WIDTH: usize = 6;
+pub const DISPLAY_HEIGHT: usize = 32;
+pub const DISPLAY_WIDTH: usize = 64;
 pub const DISPLAY_SIZE: usize = DISPLAY_HEIGHT * DISPLAY_WIDTH;
 
 #[derive(Copy, Clone, Debug, PartialEq)]

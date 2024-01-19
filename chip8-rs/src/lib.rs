@@ -103,7 +103,7 @@ pub async fn run() {
     cpu.run();
 
     // Main loop
-    let _ = event_loop.run(move |event, event_target| {
+    let _ = event_loop.run(|event, event_target| {
         let pixels = cpu.pixels();
 
         // TODO: remove, just for testing rendering
@@ -114,8 +114,6 @@ pub async fn run() {
                 false => Pixel::Off,
             })
             .collect::<Vec<_>>();
-        let mut pixels = [Pixel::Off; DISPLAY_HEIGHT * DISPLAY_WIDTH];
-        pixels[0] = Pixel::On;
         let pixels = pixels.as_slice();
 
         // TODO: maybe set a flag when pixels change to avoid redraws
@@ -136,10 +134,10 @@ pub async fn run() {
                         } => {
                             use winit::event::ElementState;
 
-                            match key_event.state {
-                                ElementState::Pressed => todo!(),
-                                ElementState::Released => todo!(),
-                            }
+                            // match key_event.state {
+                            //     ElementState::Pressed => todo!(),
+                            //     ElementState::Released => todo!(),
+                            // }
                         }
                         WindowEvent::CloseRequested => event_target.exit(),
                         WindowEvent::Resized(physical_size) => renderer.resize(*physical_size),
