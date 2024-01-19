@@ -7,7 +7,7 @@ use winit::window::Window;
 use crate::data::{Color, Point};
 use chip8::gpu::Pixel;
 
-pub const DEFAULT_PIXEL_SIZE: usize = 10;
+pub const DEFAULT_PIXEL_SIZE: usize = 100;
 
 const PIXEL_ON_COLOR: Color = Color {
     r: 1.0,
@@ -62,6 +62,7 @@ pub struct PixelRenderer {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: PhysicalSize<u32>,
+    pixel_size: usize,
     pixel_grid_size: PixelGridSize,
     render_pipeline: wgpu::RenderPipeline,
 }
@@ -184,6 +185,7 @@ impl PixelRenderer {
             queue,
             config,
             size,
+            pixel_size: DEFAULT_PIXEL_SIZE,
             pixel_grid_size: PixelGridSize { width, height },
             render_pipeline,
         }
@@ -214,22 +216,42 @@ impl PixelRenderer {
             self.size.height,
             self.size.width,
             pixels,
+            self.pixel_size,
             &self.pixel_grid_size,
         );
+        let pixel_vertices = vec![
+            Vertex { // bottom left
+                position: [-0.5, -0.5],
+                color: [1.0, 0.0, 0.0, 0.0],
+            },
+            Vertex { // bottom right
+                position: [0.5, -0.5],
+                color: [0.0, 1.0, 0.0, 0.0],
+            },
+            Vertex { // top left
+                position: [-0.5, 0.5],
+                color: [1.0, 0.0, 0.0, 0.0],
+            },
+            Vertex { // top right
+                position: [0.5, 0.5],
+                color: [0.0, 0.0, 1.0, 0.0],
+            },
+        ];
         let vertex_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&pixel_vertices),
+                contents: bytemuck::cast_slice(pixel_vertices.as_slice()),
                 usage: wgpu::BufferUsages::VERTEX,
             });
 
         let pixel_indices = create_pixel_indices(pixels, &self.pixel_grid_size);
+        let pixel_indices = vec![0, 1, 2, 2, 1, 3];
         let index_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&pixel_indices),
+                contents: bytemuck::cast_slice(pixel_indices.as_slice()),
                 usage: wgpu::BufferUsages::INDEX,
             });
 
@@ -275,6 +297,7 @@ fn create_pixel_vertices(
     height: u32,
     width: u32,
     pixels: &[Pixel],
+    pixel_size: usize,
     pixel_grid_size: &PixelGridSize,
 ) -> Vec<Vertex> {
     debug_assert_eq!(pixels.len(), pixel_grid_size.size());
@@ -288,7 +311,7 @@ fn create_pixel_vertices(
         for i in 0..pixel_grid_size.width {
             let pixel = pixels[j * pixel_grid_size.width + i];
             let x = i as f32 * pixel_width;
-            let y = j as f32 * pixel_height;
+            let y = (pixel_grid_size.height * pixel_size) as f32 - (j as f32 * pixel_height);
             match pixel {
                 Pixel::On => {
                     let pixel_vertices = build_pixel_vertices(
@@ -332,18 +355,18 @@ fn create_pixel_indices(pixels: &[Pixel], pixel_grid_size: &PixelGridSize) -> Ve
     for (i, _) in on_pixels.enumerate() {
         let i = i as u32;
         let i = i * 4; // 4 vertices per pixel
-        indices.extend_from_slice(&[i, i + 2, i + 1, i + 3, i + 1, i + 2]);
+        indices.extend_from_slice(&[i + 0, i + 2, i + 3, i + 0, i + 3, i + 1]);
     }
 
-    debug_assert_eq!(
-        indices.len(),
-        pixels
-            .iter()
-            .filter(|&p| matches!(p, Pixel::On))
-            .collect::<Vec<_>>()
-            .len()
-            * 6
-    );
+    // debug_assert_eq!(
+    //     indices.len(),
+    //     pixels
+    //         .iter()
+    //         .filter(|&p| matches!(p, Pixel::On))
+    //         .collect::<Vec<_>>()
+    //         .len()
+    //         * 6
+    // );
 
     indices
 }
@@ -361,11 +384,11 @@ fn build_pixel_vertices(point: Point<f32>, x_size: f32, y_size: f32, color: Colo
         color: color.into(),
     };
     let bottom_left = Vertex {
-        position: [x, y + y_size],
+        position: [x, y - y_size],
         color: color.into(),
     };
     let bottom_right = Vertex {
-        position: [x + x_size, y + y_size],
+        position: [x + x_size, y - y_size],
         color: color.into(),
     };
 
@@ -381,6 +404,9 @@ fn polar_to_ndc(size: &PhysicalSize<u32>, polar: Point<f32>) -> Point<f32> {
     let y = y / size.height as f32;
     let x = x * 2.0 - 1.0;
     let y = y * 2.0 - 1.0;
+
+    debug_assert!(x >= -1.0 && x <= 1.0);
+    debug_assert!(y >= -1.0 && y <= 1.0);
 
     Point { x, y }
 }
@@ -434,7 +460,7 @@ mod tests {
             width: width as usize,
         };
 
-        let vertices = create_pixel_vertices(height, width, &pixels, &pixel_grid_size);
+        let vertices = create_pixel_vertices(height, width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), (4 * height * width) as usize);
 
@@ -459,7 +485,7 @@ mod tests {
         assert_eq!(vertices[15].position, [1.0, 1.0]);
 
         let pixels = vec![Pixel::On, Pixel::Off, Pixel::On, Pixel::Off];
-        let vertices = create_pixel_vertices(height, width, &pixels, &pixel_grid_size);
+        let vertices = create_pixel_vertices(height, width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), 4 * 2);
 
@@ -474,7 +500,7 @@ mod tests {
         assert_eq!(vertices[7].position, [0.0, 1.0]);
 
         let pixels = vec![Pixel::On, Pixel::On, Pixel::Off, Pixel::Off];
-        let vertices = create_pixel_vertices(height, width, &pixels, &pixel_grid_size);
+        let vertices = create_pixel_vertices(height, width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), 4 * 2);
 

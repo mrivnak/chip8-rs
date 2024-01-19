@@ -114,6 +114,8 @@ pub async fn run() {
                 false => Pixel::Off,
             })
             .collect::<Vec<_>>();
+        let mut pixels = [Pixel::Off; DISPLAY_HEIGHT * DISPLAY_WIDTH];
+        pixels[0] = Pixel::On;
         let pixels = pixels.as_slice();
 
         // TODO: maybe set a flag when pixels change to avoid redraws
