@@ -424,8 +424,8 @@ mod tests {
         assert_eq!(vertices.len(), 4);
         assert_eq!(vertices[0].position, [0.0, 0.0]);
         assert_eq!(vertices[1].position, [1.0, 0.0]);
-        assert_eq!(vertices[2].position, [0.0, 1.0]);
-        assert_eq!(vertices[3].position, [1.0, 1.0]);
+        assert_eq!(vertices[2].position, [0.0, -1.0]);
+        assert_eq!(vertices[3].position, [1.0, -1.0]);
         assert_eq!(vertices[0].color, [1.0, 1.0, 1.0, 1.0]);
         assert_eq!(vertices[1].color, [1.0, 1.0, 1.0, 1.0]);
         assert_eq!(vertices[2].color, [1.0, 1.0, 1.0, 1.0]);
@@ -433,7 +433,9 @@ mod tests {
     }
 
     #[test]
-    fn test_create_pixel_vertices_internal() {
+    fn test_create_pixel_vertices() {
+        let screen_height = 20;
+        let screen_width = 20;
         let height: u32 = 2;
         let width: u32 = 2;
         let pixels = vec![Pixel::On; (height * width) as usize];
@@ -442,63 +444,63 @@ mod tests {
             width: width as usize,
         };
 
-        let vertices = create_pixel_vertices(height, width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
+        let vertices = create_pixel_vertices(screen_height, screen_width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), (4 * height * width) as usize);
 
-        assert_eq!(vertices[0].position, [-1.0, -1.0]);
-        assert_eq!(vertices[1].position, [0.0, -1.0]);
+        assert_eq!(vertices[0].position, [-1.0, 1.0]);
+        assert_eq!(vertices[1].position, [0.0, 1.0]);
         assert_eq!(vertices[2].position, [-1.0, 0.0]);
         assert_eq!(vertices[3].position, [0.0, 0.0]);
 
-        assert_eq!(vertices[4].position, [0.0, -1.0]);
-        assert_eq!(vertices[5].position, [1.0, -1.0]);
+        assert_eq!(vertices[4].position, [0.0, 1.0]);
+        assert_eq!(vertices[5].position, [1.0, 1.0]);
         assert_eq!(vertices[6].position, [0.0, 0.0]);
         assert_eq!(vertices[7].position, [1.0, 0.0]);
 
         assert_eq!(vertices[8].position, [-1.0, 0.0]);
         assert_eq!(vertices[9].position, [0.0, 0.0]);
-        assert_eq!(vertices[10].position, [-1.0, 1.0]);
-        assert_eq!(vertices[11].position, [0.0, 1.0]);
+        assert_eq!(vertices[10].position, [-1.0, -1.0]);
+        assert_eq!(vertices[11].position, [0.0, -1.0]);
 
         assert_eq!(vertices[12].position, [0.0, 0.0]);
         assert_eq!(vertices[13].position, [1.0, 0.0]);
-        assert_eq!(vertices[14].position, [0.0, 1.0]);
-        assert_eq!(vertices[15].position, [1.0, 1.0]);
+        assert_eq!(vertices[14].position, [0.0, -1.0]);
+        assert_eq!(vertices[15].position, [1.0, -1.0]);
 
         let pixels = vec![Pixel::On, Pixel::Off, Pixel::On, Pixel::Off];
-        let vertices = create_pixel_vertices(height, width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
+        let vertices = create_pixel_vertices(screen_height, screen_width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), 4 * 2);
 
-        assert_eq!(vertices[0].position, [-1.0, -1.0]);
-        assert_eq!(vertices[1].position, [0.0, -1.0]);
+        assert_eq!(vertices[0].position, [-1.0, 1.0]);
+        assert_eq!(vertices[1].position, [0.0, 1.0]);
         assert_eq!(vertices[2].position, [-1.0, 0.0]);
         assert_eq!(vertices[3].position, [0.0, 0.0]);
 
         assert_eq!(vertices[4].position, [-1.0, 0.0]);
         assert_eq!(vertices[5].position, [0.0, 0.0]);
-        assert_eq!(vertices[6].position, [-1.0, 1.0]);
-        assert_eq!(vertices[7].position, [0.0, 1.0]);
+        assert_eq!(vertices[6].position, [-1.0, -1.0]);
+        assert_eq!(vertices[7].position, [0.0, -1.0]);
 
         let pixels = vec![Pixel::On, Pixel::On, Pixel::Off, Pixel::Off];
-        let vertices = create_pixel_vertices(height, width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
+        let vertices = create_pixel_vertices(screen_height, screen_width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), 4 * 2);
 
-        assert_eq!(vertices[0].position, [-1.0, -1.0]);
-        assert_eq!(vertices[1].position, [0.0, -1.0]);
+        assert_eq!(vertices[0].position, [-1.0, 1.0]);
+        assert_eq!(vertices[1].position, [0.0, 1.0]);
         assert_eq!(vertices[2].position, [-1.0, 0.0]);
         assert_eq!(vertices[3].position, [0.0, 0.0]);
 
-        assert_eq!(vertices[4].position, [0.0, -1.0]);
-        assert_eq!(vertices[5].position, [1.0, -1.0]);
+        assert_eq!(vertices[4].position, [0.0, 1.0]);
+        assert_eq!(vertices[5].position, [1.0, 1.0]);
         assert_eq!(vertices[6].position, [0.0, 0.0]);
         assert_eq!(vertices[7].position, [1.0, 0.0]);
     }
 
     #[test]
-    fn test_create_pixel_indices_internal() {
+    fn test_create_pixel_indices() {
         let height = 2;
         let width = 2;
         let pixels = vec![Pixel::On; height * width];
@@ -511,30 +513,30 @@ mod tests {
         assert_eq!(indices[0], 0);
         assert_eq!(indices[1], 2);
         assert_eq!(indices[2], 1);
-        assert_eq!(indices[3], 3);
-        assert_eq!(indices[4], 1);
-        assert_eq!(indices[5], 2);
+        assert_eq!(indices[3], 2);
+        assert_eq!(indices[4], 3);
+        assert_eq!(indices[5], 1);
 
         assert_eq!(indices[6], 4);
         assert_eq!(indices[7], 6);
         assert_eq!(indices[8], 5);
-        assert_eq!(indices[9], 7);
-        assert_eq!(indices[10], 5);
-        assert_eq!(indices[11], 6);
+        assert_eq!(indices[9], 6);
+        assert_eq!(indices[10], 7);
+        assert_eq!(indices[11], 5);
 
         assert_eq!(indices[12], 8);
         assert_eq!(indices[13], 10);
         assert_eq!(indices[14], 9);
-        assert_eq!(indices[15], 11);
-        assert_eq!(indices[16], 9);
-        assert_eq!(indices[17], 10);
+        assert_eq!(indices[15], 10);
+        assert_eq!(indices[16], 11);
+        assert_eq!(indices[17], 9);
 
         assert_eq!(indices[18], 12);
         assert_eq!(indices[19], 14);
         assert_eq!(indices[20], 13);
-        assert_eq!(indices[21], 15);
-        assert_eq!(indices[22], 13);
-        assert_eq!(indices[23], 14);
+        assert_eq!(indices[21], 14);
+        assert_eq!(indices[22], 15);
+        assert_eq!(indices[23], 13);
 
         let pixels = vec![Pixel::On, Pixel::Off, Pixel::On, Pixel::Off];
         let indices = create_pixel_indices(&pixels, &pixel_grid_size);
@@ -544,16 +546,16 @@ mod tests {
         assert_eq!(indices[0], 0);
         assert_eq!(indices[1], 2);
         assert_eq!(indices[2], 1);
-        assert_eq!(indices[3], 3);
-        assert_eq!(indices[4], 1);
-        assert_eq!(indices[5], 2);
+        assert_eq!(indices[3], 2);
+        assert_eq!(indices[4], 3);
+        assert_eq!(indices[5], 1);
 
         assert_eq!(indices[6], 4);
         assert_eq!(indices[7], 6);
         assert_eq!(indices[8], 5);
-        assert_eq!(indices[9], 7);
-        assert_eq!(indices[10], 5);
-        assert_eq!(indices[11], 6);
+        assert_eq!(indices[9], 6);
+        assert_eq!(indices[10], 7);
+        assert_eq!(indices[11], 5);
 
         let pixels = vec![Pixel::On, Pixel::On, Pixel::Off, Pixel::Off];
         let indices = create_pixel_indices(&pixels, &pixel_grid_size);
@@ -563,15 +565,15 @@ mod tests {
         assert_eq!(indices[0], 0);
         assert_eq!(indices[1], 2);
         assert_eq!(indices[2], 1);
-        assert_eq!(indices[3], 3);
-        assert_eq!(indices[4], 1);
-        assert_eq!(indices[5], 2);
+        assert_eq!(indices[3], 2);
+        assert_eq!(indices[4], 3);
+        assert_eq!(indices[5], 1);
 
         assert_eq!(indices[6], 4);
         assert_eq!(indices[7], 6);
         assert_eq!(indices[8], 5);
-        assert_eq!(indices[9], 7);
-        assert_eq!(indices[10], 5);
-        assert_eq!(indices[11], 6);
+        assert_eq!(indices[9], 6);
+        assert_eq!(indices[10], 7);
+        assert_eq!(indices[11], 5);
     }
 }
