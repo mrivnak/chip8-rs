@@ -1,17 +1,31 @@
 use clap::Parser;
+use pixels_wgpu::data::Color;
+use pixels_wgpu::renderer;
+use pixels_wgpu::renderer::PixelRenderer;
 use std::io::Read;
-use tracing::{error, info, warn};
+use tracing::error;
 use winit::dpi::LogicalSize;
 use winit::event::Event;
 use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
+use chip8::cpu;
 
-use crate::renderer::DEFAULT_PIXEL_SIZE;
 use chip8::cpu::CPU;
-use chip8::gpu::{Pixel, DISPLAY_HEIGHT, DISPLAY_WIDTH};
+use chip8::gpu::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
-mod data;
-mod renderer;
+const DEFAULT_PIXEL_SIZE: f32 = 20.0;
+const PIXEL_ON_COLOR: Color = Color {
+    r: 1.0,
+    g: 1.0,
+    b: 1.0,
+    a: 1.0,
+};
+const PIXEL_OFF_COLOR: Color = Color {
+    r: 0.0,
+    g: 0.0,
+    b: 0.0,
+    a: 1.0,
+};
 
 #[derive(Parser, Clone, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -66,68 +80,79 @@ pub async fn main() {
         .build(&event_loop)
         .expect("Could not create window");
 
-    let mut renderer = renderer::PixelRenderer::new(&window, DISPLAY_HEIGHT, DISPLAY_WIDTH).await;
+    let mut renderer = PixelRenderer::new(
+        &window,
+        DISPLAY_HEIGHT,
+        DISPLAY_WIDTH,
+        DEFAULT_PIXEL_SIZE,
+        PIXEL_ON_COLOR,
+        PIXEL_OFF_COLOR,
+    )
+    .await;
 
     // Run CPU
     cpu.run();
 
     // Main loop
+    let mut last_frame = std::time::Instant::now();
+    let mut pixels = vec![renderer::Pixel::Off; DISPLAY_HEIGHT * DISPLAY_WIDTH];
     let _ = event_loop.run(|event, event_target| {
-        let pixels = cpu.pixels();
-
-        // TODO: remove, just for testing rendering
-        let pixels = pixels
-            .iter()
-            .map(|pixel| match rand::random() {
-                true => Pixel::On,
-                false => Pixel::Off,
-            })
-            .collect::<Vec<_>>();
-        let pixels = pixels.as_slice();
-
-        // TODO: maybe set a flag when pixels change to avoid redraws
+        let now = std::time::Instant::now();
+        if now.duration_since(last_frame) > std::time::Duration::from_millis((1.0 / cpu::FREQUENCY as f32 * 1000.0) as u64) {
+            pixels = cpu
+                .pixels()
+                .into_iter()
+                .map(|&p| match p {
+                    chip8::gpu::Pixel::On => renderer::Pixel::On,
+                    chip8::gpu::Pixel::Off => renderer::Pixel::Off,
+                })
+                .collect::<Vec<_>>();
+            window.request_redraw();
+        }
 
         match event {
             Event::WindowEvent {
                 ref event,
                 window_id,
             } if window_id == window.id() => {
-                if !renderer.input(event) {
-                    use winit::event::WindowEvent;
+                use winit::event::WindowEvent;
 
-                    match event {
-                        WindowEvent::KeyboardInput {
-                            device_id: _,
-                            event: key_event,
-                            is_synthetic: _,
-                        } => {
-                            use winit::event::ElementState;
+                match event {
+                    WindowEvent::KeyboardInput {
+                        device_id: _,
+                        event: key_event,
+                        is_synthetic: _,
+                    } => {
+                        use winit::event::ElementState;
 
-                            // match key_event.state {
-                            //     ElementState::Pressed => todo!(),
-                            //     ElementState::Released => todo!(),
-                            // }
-                        }
-                        WindowEvent::CloseRequested => event_target.exit(),
-                        WindowEvent::Resized(physical_size) => renderer.resize(*physical_size),
-                        WindowEvent::RedrawRequested => {
-                            renderer.update();
-
-                            match renderer.render(pixels) {
-                                Ok(_) => {}
-                                // Reconfigure the surface if lost
-                                Err(wgpu::SurfaceError::Lost) => renderer.resize(renderer.size),
-                                // The system is out of memory, we should probably quit
-                                Err(wgpu::SurfaceError::OutOfMemory) => event_target.exit(),
-                                // All other errors (Outdated, Timeout) should be resolved by the next frame
-                                Err(e) => error!("{:?}", e),
-                            }
-                        }
-                        _ => {}
+                        // match key_event.state {
+                        //     ElementState::Pressed => todo!(),
+                        //     ElementState::Released => todo!(),
+                        // }
                     }
+                    WindowEvent::CloseRequested => event_target.exit(),
+                    WindowEvent::Resized(physical_size) => renderer.resize(*physical_size),
+                    WindowEvent::RedrawRequested => {
+                        match renderer.render(pixels.as_slice()) {
+                            Ok(_) => {}
+                            // Reconfigure the surface if lost
+                            Err(pixels_wgpu::wgpu::SurfaceError::Lost) => {
+                                renderer.resize(renderer.size)
+                            }
+                            // The system is out of memory, we should probably quit
+                            Err(pixels_wgpu::wgpu::SurfaceError::OutOfMemory) => {
+                                event_target.exit()
+                            }
+                            // All other errors (Outdated, Timeout) should be resolved by the next frame
+                            Err(e) => error!("{:?}", e),
+                        }
+                    }
+                    _ => {}
                 }
             }
             _ => {}
         }
+
+        last_frame = std::time::Instant::now();
     });
 }

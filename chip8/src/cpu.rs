@@ -4,6 +4,7 @@ use crate::memory::PROGRAM_START;
 use crate::{data::Address, memory::MemoryBus, registers::Registers};
 
 const STACK_SIZE: usize = 16;
+pub const FREQUENCY: u32 = 500; // 500 Hz
 
 pub type Stack = [Address; STACK_SIZE];
 
