@@ -213,6 +213,9 @@ impl<'a> PixelRenderer<'a> {
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
         }
+
+        debug_assert!(self.usable_size.width <= self.size.width);
+        debug_assert!(self.usable_size.height <= self.size.height);
     }
 
     pub fn render(&mut self, pixels: &[Pixel]) -> Result<(), wgpu::SurfaceError> {
@@ -473,8 +476,7 @@ mod tests {
 
     #[test]
     fn test_create_pixel_vertices() {
-        let screen_height = 20;
-        let screen_width = 20;
+        let screen_size = PhysicalSize::new(20, 20);
         let height: u32 = 2;
         let width: u32 = 2;
         let pixels = vec![Pixel::On; (height * width) as usize];
@@ -483,7 +485,7 @@ mod tests {
             width: width as usize,
         };
 
-        let vertices = create_pixel_vertices(screen_height, screen_width, 0, 0, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
+        let vertices = create_pixel_vertices(&screen_size, &screen_size, 0, 0, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), (4 * height * width) as usize);
 
@@ -508,7 +510,7 @@ mod tests {
         assert_eq!(vertices[15].position, [1.0, -1.0]);
 
         let pixels = vec![Pixel::On, Pixel::Off, Pixel::On, Pixel::Off];
-        let vertices = create_pixel_vertices(screen_height, screen_width, 0, 0, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
+        let vertices = create_pixel_vertices(&screen_size, &screen_size, 0, 0, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), 4 * 2);
 
@@ -523,7 +525,7 @@ mod tests {
         assert_eq!(vertices[7].position, [0.0, -1.0]);
 
         let pixels = vec![Pixel::On, Pixel::On, Pixel::Off, Pixel::Off];
-        let vertices = create_pixel_vertices(screen_height, screen_width, 0, 0, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
+        let vertices = create_pixel_vertices(&screen_size, &screen_size, 0, 0, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), 4 * 2);
 
