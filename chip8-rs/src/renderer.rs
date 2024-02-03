@@ -62,6 +62,7 @@ pub struct PixelRenderer<'a> {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: PhysicalSize<u32>,
+    usable_size: PhysicalSize<u32>,
     pixel_size: usize,
     pixel_grid_size: PixelGridSize,
     render_pipeline: wgpu::RenderPipeline,
@@ -182,6 +183,7 @@ impl<'a> PixelRenderer<'a> {
             queue,
             config,
             size,
+            usable_size: size,
             pixel_size: DEFAULT_PIXEL_SIZE,
             pixel_grid_size: PixelGridSize { width, height },
             render_pipeline,
@@ -198,7 +200,14 @@ impl<'a> PixelRenderer<'a> {
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        let mut new_size = new_size;
         if new_size.width > 0 && new_size.height > 0 {
+            // Constrains resizing to the aspect ratio of the pixel grid
+
+            // Letterboxing
+            self.usable_size = create_canvas_size(&self.pixel_grid_size, &new_size);
+            self.pixel_size = self.usable_size.height as usize / self.pixel_grid_size.height;
+
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
@@ -209,9 +218,14 @@ impl<'a> PixelRenderer<'a> {
     pub fn render(&mut self, pixels: &[Pixel]) -> Result<(), wgpu::SurfaceError> {
         debug_assert_eq!(pixels.len(), self.pixel_grid_size.size());
 
+        let h_offset = (self.size.width - self.usable_size.width) / 2;
+        let v_offset = (self.size.height - self.usable_size.height) / 2;
+
         let pixel_vertices = create_pixel_vertices(
-            self.size.height,
-            self.size.width,
+            &self.size,
+            &self.usable_size,
+            h_offset,
+            v_offset,
             pixels,
             self.pixel_size,
             &self.pixel_grid_size,
@@ -272,8 +286,10 @@ impl<'a> PixelRenderer<'a> {
 }
 
 fn create_pixel_vertices(
-    height: u32,
-    width: u32,
+    window_size: &PhysicalSize<u32>,
+    canvas_size: &PhysicalSize<u32>,
+    h_offset: u32,
+    v_offset: u32,
     pixels: &[Pixel],
     pixel_size: usize,
     pixel_grid_size: &PixelGridSize,
@@ -281,8 +297,8 @@ fn create_pixel_vertices(
     debug_assert_eq!(pixels.len(), pixel_grid_size.size());
     // TODO: only render pixels in a field with the same aspect ratio as the grid, if the window is a different aspect ratio
 
-    let pixel_height = height as f32 / pixel_grid_size.height as f32;
-    let pixel_width = width as f32 / pixel_grid_size.width as f32;
+    let pixel_height = canvas_size.height as f32 / pixel_grid_size.height as f32;
+    let pixel_width = canvas_size.width as f32 / pixel_grid_size.width as f32;
 
     let mut vertices = Vec::with_capacity(pixels.len() * 6);
     for j in 0..pixel_grid_size.height {
@@ -290,6 +306,8 @@ fn create_pixel_vertices(
             let pixel = pixels[j * pixel_grid_size.width + i];
             let x = i as f32 * pixel_width;
             let y = (pixel_grid_size.height * pixel_size) as f32 - (j as f32 * pixel_height);
+            let x = x + h_offset as f32;
+            let y = y + v_offset as f32;
             match pixel {
                 Pixel::On => {
                     let pixel_vertices = build_pixel_vertices(
@@ -307,7 +325,7 @@ fn create_pixel_vertices(
     let vertices = vertices
         .iter()
         .map(|v| Vertex {
-            position: polar_to_ndc(&PhysicalSize::new(width, height), v.position.into()).into(),
+            position: polar_to_ndc(&PhysicalSize::new(window_size.width, window_size.height), v.position.into()).into(),
             color: v.color,
         })
         .collect::<Vec<_>>();
@@ -370,6 +388,12 @@ fn build_pixel_vertices(point: Point<f32>, x_size: f32, y_size: f32, color: Colo
         color: color.into(),
     };
 
+    debug_assert_eq!(top_left.position[1] - bottom_left.position[1], y_size);
+    debug_assert_eq!(top_right.position[1] - bottom_right.position[1], y_size);
+
+    debug_assert_eq!(top_right.position[0] - top_left.position[0], x_size);
+    debug_assert_eq!(bottom_right.position[0] - bottom_left.position[0], x_size);
+
     [top_left, top_right, bottom_left, bottom_right]
 }
 
@@ -387,6 +411,25 @@ fn polar_to_ndc(size: &PhysicalSize<u32>, polar: Point<f32>) -> Point<f32> {
     debug_assert!(y >= -1.0 && y <= 1.0);
 
     Point { x, y }
+}
+
+fn create_canvas_size(pixel_grid_size: &PixelGridSize, window_size: &PhysicalSize<u32>) -> PhysicalSize<u32> {
+    let grid_aspect_ratio = pixel_grid_size.width as f32 / pixel_grid_size.height as f32;
+    let window_aspect_ratio = window_size.width as f32 / window_size.height as f32;
+
+    match window_aspect_ratio.partial_cmp(&grid_aspect_ratio).expect("Could not compare aspect ratios (NaN?)") {
+        std::cmp::Ordering::Equal => window_size.clone(),
+        std::cmp::Ordering::Greater => {
+            // Too wide, add black bars on the sides
+            let constrained_width = window_size.height as f32 * grid_aspect_ratio;
+            PhysicalSize::new(constrained_width as u32, window_size.height)
+        }
+        std::cmp::Ordering::Less => {
+            // Too tall, add black bars on the top and bottom
+            let constrained_height = window_size.width as f32 / grid_aspect_ratio;
+            PhysicalSize::new(window_size.width, constrained_height as u32)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -440,7 +483,7 @@ mod tests {
             width: width as usize,
         };
 
-        let vertices = create_pixel_vertices(screen_height, screen_width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
+        let vertices = create_pixel_vertices(screen_height, screen_width, 0, 0, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), (4 * height * width) as usize);
 
@@ -465,7 +508,7 @@ mod tests {
         assert_eq!(vertices[15].position, [1.0, -1.0]);
 
         let pixels = vec![Pixel::On, Pixel::Off, Pixel::On, Pixel::Off];
-        let vertices = create_pixel_vertices(screen_height, screen_width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
+        let vertices = create_pixel_vertices(screen_height, screen_width, 0, 0, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), 4 * 2);
 
@@ -480,7 +523,7 @@ mod tests {
         assert_eq!(vertices[7].position, [0.0, -1.0]);
 
         let pixels = vec![Pixel::On, Pixel::On, Pixel::Off, Pixel::Off];
-        let vertices = create_pixel_vertices(screen_height, screen_width, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
+        let vertices = create_pixel_vertices(screen_height, screen_width, 0, 0, &pixels, DEFAULT_PIXEL_SIZE, &pixel_grid_size);
 
         assert_eq!(vertices.len(), 4 * 2);
 
@@ -571,5 +614,18 @@ mod tests {
         assert_eq!(indices[9], 6);
         assert_eq!(indices[10], 7);
         assert_eq!(indices[11], 5);
+    }
+
+    #[test_case(20, 10, 40, 20, 40, 20)]
+    #[test_case(40, 20, 40, 20, 40, 20)]
+    #[test_case(40, 20, 40, 40, 40, 20)]
+    #[test_case(40, 20, 20, 20, 20, 10)]
+    fn test_create_canvas_size(grid_width: usize, grid_height: usize, window_width: u32, window_height: u32, expected_width: u32, expected_height: u32) {
+        let pixel_grid_size = PixelGridSize { width: grid_width, height: grid_height };
+        let window_size = PhysicalSize::new(window_width, window_height);
+        let actual = create_canvas_size(&pixel_grid_size, &window_size);
+
+        assert_eq!(actual.width, expected_width);
+        assert_eq!(actual.height, expected_height);
     }
 }
