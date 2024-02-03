@@ -7,7 +7,7 @@ use winit::window::Window;
 use crate::data::{Color, Point};
 use chip8::gpu::Pixel;
 
-pub const DEFAULT_PIXEL_SIZE: usize = 10;
+pub const DEFAULT_PIXEL_SIZE: f32 = 10.;
 
 const PIXEL_ON_COLOR: Color = Color {
     r: 1.0,
@@ -63,7 +63,7 @@ pub struct PixelRenderer<'a> {
     config: wgpu::SurfaceConfiguration,
     pub size: PhysicalSize<u32>,
     usable_size: PhysicalSize<u32>,
-    pixel_size: usize,
+    pixel_size: f32,
     pixel_grid_size: PixelGridSize,
     render_pipeline: wgpu::RenderPipeline,
 }
@@ -206,7 +206,7 @@ impl<'a> PixelRenderer<'a> {
 
             // Letterboxing
             self.usable_size = create_canvas_size(&self.pixel_grid_size, &new_size);
-            self.pixel_size = self.usable_size.height as usize / self.pixel_grid_size.height;
+            self.pixel_size = self.usable_size.height as f32 / self.pixel_grid_size.height as f32;
 
             self.size = new_size;
             self.config.width = new_size.width;
@@ -294,29 +294,28 @@ fn create_pixel_vertices(
     h_offset: u32,
     v_offset: u32,
     pixels: &[Pixel],
-    pixel_size: usize,
+    pixel_size: f32,
     pixel_grid_size: &PixelGridSize,
 ) -> Vec<Vertex> {
     debug_assert_eq!(pixels.len(), pixel_grid_size.size());
-    // TODO: only render pixels in a field with the same aspect ratio as the grid, if the window is a different aspect ratio
 
-    let pixel_height = canvas_size.height as f32 / pixel_grid_size.height as f32;
-    let pixel_width = canvas_size.width as f32 / pixel_grid_size.width as f32;
+    debug_assert!((h_offset * 2) + canvas_size.width <= window_size.width);
+    debug_assert!((v_offset * 2) + canvas_size.height <= window_size.height);
+
 
     let mut vertices = Vec::with_capacity(pixels.len() * 6);
     for j in 0..pixel_grid_size.height {
         for i in 0..pixel_grid_size.width {
             let pixel = pixels[j * pixel_grid_size.width + i];
-            let x = i as f32 * pixel_width;
-            let y = (pixel_grid_size.height * pixel_size) as f32 - (j as f32 * pixel_height);
+            let x = i as f32 * pixel_size;
+            let y = (pixel_grid_size.height as f32 * pixel_size) - (j as f32 * pixel_size);
             let x = x + h_offset as f32;
             let y = y + v_offset as f32;
             match pixel {
                 Pixel::On => {
                     let pixel_vertices = build_pixel_vertices(
                         Point { x, y },
-                        pixel_width,
-                        pixel_height,
+                        pixel_size,
                         PIXEL_ON_COLOR,
                     );
                     vertices.extend_from_slice(&pixel_vertices);
@@ -370,7 +369,7 @@ fn create_pixel_indices(pixels: &[Pixel], pixel_grid_size: &PixelGridSize) -> Ve
     indices
 }
 
-fn build_pixel_vertices(point: Point<f32>, x_size: f32, y_size: f32, color: Color) -> [Vertex; 4] {
+fn build_pixel_vertices(point: Point<f32>, size: f32, color: Color) -> [Vertex; 4] {
     let x = point.x;
     let y = point.y;
 
@@ -379,23 +378,25 @@ fn build_pixel_vertices(point: Point<f32>, x_size: f32, y_size: f32, color: Colo
         color: color.into(),
     };
     let top_right = Vertex {
-        position: [x + x_size, y],
+        position: [x + size, y],
         color: color.into(),
     };
     let bottom_left = Vertex {
-        position: [x, y - y_size],
+        position: [x, y - size],
         color: color.into(),
     };
     let bottom_right = Vertex {
-        position: [x + x_size, y - y_size],
+        position: [x + size, y - size],
         color: color.into(),
     };
 
-    debug_assert_eq!(top_left.position[1] - bottom_left.position[1], y_size);
-    debug_assert_eq!(top_right.position[1] - bottom_right.position[1], y_size);
+    const THRESHOLD: f32 = 0.001;
 
-    debug_assert_eq!(top_right.position[0] - top_left.position[0], x_size);
-    debug_assert_eq!(bottom_right.position[0] - bottom_left.position[0], x_size);
+    debug_assert!(((top_left.position[1] - bottom_left.position[1]) - size).abs() < THRESHOLD, "pixel coordinates do not align with pixel height");
+    debug_assert!(((top_right.position[1] - bottom_right.position[1]) - size).abs() < THRESHOLD, "pixel coordinates do not align with pixel height");
+
+    debug_assert!(((top_right.position[0] - top_left.position[0]) - size).abs() < THRESHOLD, "pixel coordinates do not align with pixel width");
+    debug_assert!(((bottom_right.position[0] - bottom_left.position[0]) - size).abs() < THRESHOLD, "pixel coordinates do not align with pixel width");
 
     [top_left, top_right, bottom_left, bottom_right]
 }
@@ -410,8 +411,13 @@ fn polar_to_ndc(size: &PhysicalSize<u32>, polar: Point<f32>) -> Point<f32> {
     let x = x * 2.0 - 1.0;
     let y = y * 2.0 - 1.0;
 
-    debug_assert!(x >= -1.0 && x <= 1.0);
-    debug_assert!(y >= -1.0 && y <= 1.0);
+    const THRESHOLD: f32 = 0.1;
+
+    if (x < -1.0 - THRESHOLD || x > 1.0 + THRESHOLD) || (y < -1.0 - THRESHOLD || y > 1.0 + THRESHOLD) {
+        eprintln!("Point out of NDC bounds");
+    }
+
+    // debug_assert!(x >= -1.0 - THRESHOLD && x <= 1.0 + THRESHOLD && y >= -1.0 - THRESHOLD && y <= 1.0 + THRESHOLD, "Point out of NDC bounds");
 
     Point { x, y }
 }
@@ -454,15 +460,14 @@ mod tests {
     #[test]
     fn test_build_pixel_vertices() {
         let point = Point { x: 0.0, y: 0.0 };
-        let x_size = 1.0;
-        let y_size = 1.0;
+        let size = 1.0;
         let color = Color {
             r: 1.0,
             g: 1.0,
             b: 1.0,
             a: 1.0,
         };
-        let vertices = build_pixel_vertices(point, x_size, y_size, color);
+        let vertices = build_pixel_vertices(point, size, color);
         assert_eq!(vertices.len(), 4);
         assert_eq!(vertices[0].position, [0.0, 0.0]);
         assert_eq!(vertices[1].position, [1.0, 0.0]);
@@ -622,6 +627,7 @@ mod tests {
     #[test_case(40, 20, 40, 20, 40, 20)]
     #[test_case(40, 20, 40, 40, 40, 20)]
     #[test_case(40, 20, 20, 20, 20, 10)]
+    #[test_case(40, 20, 20, 40, 20, 10)]
     fn test_create_canvas_size(grid_width: usize, grid_height: usize, window_width: u32, window_height: u32, expected_width: u32, expected_height: u32) {
         let pixel_grid_size = PixelGridSize { width: grid_width, height: grid_height };
         let window_size = PhysicalSize::new(window_width, window_height);

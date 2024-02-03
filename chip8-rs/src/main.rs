@@ -60,8 +60,8 @@ pub async fn main() {
     let window = WindowBuilder::new()
         .with_title("Chip8")
         .with_inner_size(LogicalSize::new(
-            (DISPLAY_WIDTH * DEFAULT_PIXEL_SIZE) as f64,
-            (DISPLAY_HEIGHT * DEFAULT_PIXEL_SIZE) as f64,
+            DISPLAY_WIDTH as f32 * DEFAULT_PIXEL_SIZE,
+            DISPLAY_HEIGHT as f32 * DEFAULT_PIXEL_SIZE,
         ))
         .build(&event_loop)
         .expect("Could not create window");
