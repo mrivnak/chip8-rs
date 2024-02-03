@@ -8,10 +8,9 @@ use winit::dpi::LogicalSize;
 use winit::event::Event;
 use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
-use chip8::cpu;
 
-use chip8::cpu::CPU;
 use chip8::gpu::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
+use chip8::system::SystemBuilder;
 
 const DEFAULT_PIXEL_SIZE: f32 = 20.0;
 const PIXEL_ON_COLOR: Color = Color {
@@ -66,8 +65,7 @@ pub async fn main() {
     let rom = rom_buffer.as_slice();
 
     // Initialize CPU
-    let mut cpu = CPU::init();
-    cpu.load_rom(rom);
+    let system_builder = SystemBuilder::new(rom);
 
     // Create window
     let event_loop = EventLoop::new().expect("Could not create event loop");
@@ -90,19 +88,17 @@ pub async fn main() {
     )
     .await;
 
-    // Run CPU
-    cpu.run();
+    let system = system_builder.run();
 
     // Main loop
-    let mut last_frame = std::time::Instant::now();
     let mut pixels = vec![renderer::Pixel::Off; DISPLAY_HEIGHT * DISPLAY_WIDTH];
     let _ = event_loop.run(|event, event_target| {
-        let now = std::time::Instant::now();
-        if now.duration_since(last_frame) > std::time::Duration::from_millis((1.0 / cpu::FREQUENCY as f32 * 1000.0) as u64) {
-            pixels = cpu
+        // Pixel rendering
+        if system.has_new_frame() {
+            pixels = system
                 .pixels()
                 .into_iter()
-                .map(|&p| match p {
+                .map(|p| match p {
                     chip8::gpu::Pixel::On => renderer::Pixel::On,
                     chip8::gpu::Pixel::Off => renderer::Pixel::Off,
                 })
@@ -110,6 +106,7 @@ pub async fn main() {
             window.request_redraw();
         }
 
+        // Window event handling
         match event {
             Event::WindowEvent {
                 ref event,
@@ -152,7 +149,5 @@ pub async fn main() {
             }
             _ => {}
         }
-
-        last_frame = std::time::Instant::now();
     });
 }

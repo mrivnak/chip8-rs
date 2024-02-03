@@ -13,6 +13,7 @@ pub struct CPU {
     pub memory: MemoryBus,
     pub stack: Stack,
     display: Display,
+    pub has_new_frame: bool,
 }
 
 impl Default for CPU {
@@ -22,6 +23,7 @@ impl Default for CPU {
             memory: MemoryBus::default(),
             stack: [0; STACK_SIZE],
             display: Display::default(),
+            has_new_frame: false,
         }
     }
 }
@@ -42,18 +44,12 @@ impl CPU {
         self.memory.write_bytes(PROGRAM_START, rom);
     }
 
-    pub fn pixels(&self) -> &[Pixel; DISPLAY_SIZE] {
+    pub fn pixels(&mut self) -> &[Pixel; DISPLAY_SIZE] {
+        self.has_new_frame = false;
         &self.display.pixels
     }
 
-    pub fn run(&mut self) {
-        // TODO: tick in a separate thread at 1 MHz
-        // loop {
-        //     self.tick();
-        // }
-    }
-
-    fn tick(&mut self) {
+    pub fn tick(&mut self) {
         // TODO: Implement tick
 
         let instr = self.fetch();
