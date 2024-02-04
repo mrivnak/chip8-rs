@@ -66,14 +66,92 @@ impl CPU {
 
     fn execute(&mut self, instr: OpCode) {
         match (instr & 0xF000) >> 12 {
-            0 => match instr & 0x00FF {
+            0x0 => match instr & 0x00FF {
                 0xE0 => self.display.clear(),
                 0xEE => self.ret(),
                 _ => self.sys_addr(instr),
             },
-            1 => self.jump_addr(instr & 0x0FFF),
-            2 => self.call_addr(instr & 0x0FFF),
-            _ => unimplemented!("Instruction {:04X} not implemented", instr),
+            0x1 => self.jump_addr(instr & 0x0FFF),
+            0x2 => self.call_addr(instr & 0x0FFF),
+            0x3 => {
+                self.registers.pc += if self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize]
+                    == (instr & 0x00FF) as u8
+                {
+                    2
+                } else {
+                    0
+                }
+            }
+            0x4 => {
+                self.registers.pc += if self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize]
+                    != (instr & 0x00FF) as u8
+                {
+                    2
+                } else {
+                    0
+                }
+            }
+            0x5 => {
+                self.registers.pc += if self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize]
+                    == self.registers.v[(instr as u16 & 0x0F00 >> 4) as usize]
+                {
+                    2
+                } else {
+                    0
+                }
+            }
+            0x6 => {
+                self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] = (instr & 0x00FF) as u8;
+            }
+            0x7 => {
+                self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] += (instr & 0x00FF) as u8;
+            }
+            0x8 => match instr & 0x000F {
+                0x0 => {
+                    self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] =
+                        self.registers.v[(instr as u16 & 0x00F0 >> 4) as usize]
+                }
+                0x1 => {
+                    self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] |=
+                        self.registers.v[(instr as u16 & 0x00F0 >> 4) as usize]
+                }
+                0x2 => {
+                    self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] &=
+                        self.registers.v[(instr as u16 & 0x00F0 >> 4) as usize]
+                }
+                0x3 => {
+                    self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] ^=
+                        self.registers.v[(instr as u16 & 0x00F0 >> 4) as usize]
+                }
+                0x4 => {
+                    let (result, overflow) = self.registers.v
+                        [(instr as u16 & 0x0F00 >> 8) as usize]
+                        .overflowing_add(self.registers.v[(instr as u16 & 0x00F0 >> 4) as usize]);
+                    self.registers.v[0xF] = if overflow { 1 } else { 0 };
+                    self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] = result;
+                }
+                0x5 => {
+                    let (result, overflow) = self.registers.v
+                        [(instr as u16 & 0x0F00 >> 8) as usize]
+                        .overflowing_sub(self.registers.v[(instr as u16 & 0x00F0 >> 4) as usize]);
+                    self.registers.v[0xF] = if overflow { 0 } else { 1 };
+                    self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] = result;
+                }
+                0x6 => {
+                    self.registers.v[0xF] =
+                        self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] & 0x1;
+                    self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] >>= 1;
+                }
+                0x7 => {
+                    let (result, overflow) = self.registers.v
+                        [(instr as u16 & 0x00F0 >> 4) as usize]
+                        .overflowing_sub(self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize]);
+                    self.registers.v[0xF] = if overflow { 0 } else { 1 };
+                    self.registers.v[(instr as u16 & 0x0F00 >> 8) as usize] = result;
+                }
+                _ => unreachable!("Instruction 0x{:04X} is not valid", instr),
+            },
+            _ => unimplemented!("Instruction 0x{:04X} not implemented", instr),
         }
     }
 

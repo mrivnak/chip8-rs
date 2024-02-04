@@ -48,6 +48,6 @@ impl System {
     }
 
     pub fn stop(mut self) {
-        let _ = self.cpu_thread.map(|t| t.join());
+        let _ = self.cpu_thread.join();
     }
 }
