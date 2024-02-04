@@ -47,7 +47,7 @@ impl System {
         self.cpu.lock().expect("Unable to lock CPU").has_new_frame
     }
 
-    pub fn stop(mut self) {
+    pub fn stop(self) {
         let _ = self.cpu_thread.join();
     }
 }
