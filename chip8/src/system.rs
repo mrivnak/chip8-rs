@@ -20,10 +20,10 @@ impl<'a> SystemBuilder<'a> {
         cpu.lock().expect("Unable to lock CPU").load_rom(self.rom);
 
         let thread_cpu = Arc::clone(&cpu);
-        let cpu_thread = Some(thread::spawn(move || loop {
+        let cpu_thread = thread::spawn(move || loop {
             thread_cpu.lock().expect("Unable to lock CPU").tick();
-            thread::sleep(TARGET_FRAME_DELTA);
-        }));
+            thread::sleep(TARGET_FRAME_DELTA); // TODO: Implement proper timing
+        });
 
         System { cpu, cpu_thread }
     }
@@ -31,7 +31,7 @@ impl<'a> SystemBuilder<'a> {
 
 pub struct System {
     pub cpu: Arc<Mutex<CPU>>,
-    cpu_thread: Option<thread::JoinHandle<()>>,
+    cpu_thread: thread::JoinHandle<()>,
 }
 
 impl System {
@@ -48,6 +48,6 @@ impl System {
     }
 
     pub fn stop(mut self) {
-        self.cpu_thread.take().map(|t| t.join());
+        let _ = self.cpu_thread.map(|t| t.join());
     }
 }
