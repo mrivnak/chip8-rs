@@ -1,1 +1,0 @@
-pub type Keypad = [bool; 16];

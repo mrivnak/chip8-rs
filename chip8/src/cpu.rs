@@ -1,6 +1,11 @@
+use rand::{Rng, SeedableRng};
+use rand_pcg::Pcg64Mcg;
+
 use crate::data::OpCode;
-use crate::gpu::{Display, Pixel, DISPLAY_SIZE};
+use crate::display::{Display, Pixel, DISPLAY_SIZE};
+use crate::keyboard::Keyboard;
 use crate::memory::PROGRAM_START;
+use crate::timer::Timer;
 use crate::{data::Address, memory::MemoryBus, registers::Registers};
 
 const STACK_SIZE: usize = 16;
@@ -8,12 +13,24 @@ pub const FREQUENCY: u32 = 500; // 500 Hz
 
 pub type Stack = [Address; STACK_SIZE];
 
+#[derive(Default, Debug, PartialEq)]
+pub enum Interrupt {
+    #[default]
+    None,
+    KeyPress(u8),
+}
+
 pub struct CPU {
     pub registers: Registers,
-    pub memory: MemoryBus,
-    pub stack: Stack,
+    memory: MemoryBus,
+    stack: Stack,
+    keyboard: Keyboard,
     display: Display,
-    pub has_new_frame: bool,
+    pub drawing: bool,
+    rng: Pcg64Mcg,
+    interrupt: Interrupt,
+    delay: Timer,
+    sound: Timer,
 }
 
 impl Default for CPU {
@@ -22,14 +39,19 @@ impl Default for CPU {
             registers: Registers::default(),
             memory: MemoryBus::default(),
             stack: [0; STACK_SIZE],
+            keyboard: Keyboard::default(),
             display: Display::default(),
-            has_new_frame: false,
+            drawing: false,
+            rng: Pcg64Mcg::from_entropy(),
+            interrupt: Interrupt::None,
+            delay: Timer::new(),
+            sound: Timer::new(),
         }
     }
 }
 
 impl CPU {
-    pub fn init() -> CPU {
+    pub fn init(rom: &[u8]) -> CPU {
         let mut cpu = CPU::default();
 
         // Load font into memory
@@ -37,28 +59,49 @@ impl CPU {
         const FONT_START: Address = 0x50; // Arbitrary, but it's convention to start at 0x50
         cpu.memory.write_bytes(FONT_START, font_rom);
 
+        // Load ROM into memory
+        cpu.memory.write_bytes(PROGRAM_START, rom);
+        cpu.registers.pc = PROGRAM_START;
+
         cpu
     }
 
-    pub fn load_rom(&mut self, rom: &[u8]) {
-        self.memory.write_bytes(PROGRAM_START, rom);
-    }
-
     pub fn pixels(&mut self) -> &[Pixel; DISPLAY_SIZE] {
-        self.has_new_frame = false;
+        self.drawing = false;
         &self.display.pixels
     }
 
     pub fn tick(&mut self) {
-        // TODO: Implement tick
+        match self.interrupt {
+            Interrupt::KeyPress(_) => (),
+            Interrupt::None => {
+                let instr = self.fetch();
+                self.execute(instr);
+            }
+        }
+    }
 
-        let instr = self.fetch();
-        self.execute(instr);
+    pub fn tick_timers(&mut self) {
+        self.delay.tick();
+        self.sound.tick();
+    }
+
+    pub fn key_down(&mut self, key: u8) {
+        self.keyboard[key as usize] = true;
+
+        if let Interrupt::KeyPress(x) = self.interrupt {
+            self.registers.v[x as usize] = key;
+            self.interrupt = Interrupt::None;
+        }
+    }
+
+    pub fn key_up(&mut self, key: u8) {
+        self.keyboard[key as usize] = false;
     }
 
     fn fetch(&mut self) -> OpCode {
-        let right = self.memory.read(self.registers.pc);
-        let left = self.memory.read(self.registers.pc + 1);
+        let left = self.memory.read(self.registers.pc);
+        let right = self.memory.read(self.registers.pc + 1);
         let instruction = (left as u16) << 8 | right as u16;
         self.registers.pc += 2;
         instruction
@@ -75,8 +118,8 @@ impl CPU {
             0x2 => self.call_addr(instr & 0x0FFF), // 2NNN; CALL addr
             0x3 => {
                 // 3XNN; SE Vx, byte
-                let dst = ((instr as u16 & 0x0F00) >> 8) as usize;
-                self.registers.pc += if self.registers.v[dst] == (instr & 0x00FF) as u8 {
+                let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                self.registers.pc += if self.registers.v[vx] == (instr & 0x00FF) as u8 {
                     2
                 } else {
                     0
@@ -84,8 +127,8 @@ impl CPU {
             }
             0x4 => {
                 // 4XNN; SNE Vx, byte
-                let dst = ((instr as u16 & 0x0F00) >> 8) as usize;
-                self.registers.pc += if self.registers.v[dst] != (instr & 0x00FF) as u8 {
+                let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                self.registers.pc += if self.registers.v[vx] != (instr & 0x00FF) as u8 {
                     2
                 } else {
                     0
@@ -93,9 +136,9 @@ impl CPU {
             }
             0x5 => {
                 // 5XY0; SE Vx, Vy
-                let src = ((instr as u16 & 0x00F0) >> 4) as usize;
-                let dst = ((instr as u16 & 0x0F00) >> 8) as usize;
-                self.registers.pc += if self.registers.v[dst] == self.registers.v[src] {
+                let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                let vy = ((instr as u16 & 0x00F0) >> 4) as usize;
+                self.registers.pc += if self.registers.v[vx] == self.registers.v[vy] {
                     2
                 } else {
                     0
@@ -103,51 +146,131 @@ impl CPU {
             }
             0x6 => {
                 // 6XNN; LD Vx, byte
-                let dst = ((instr as u16 & 0x0F00) >> 8) as usize;
-                self.registers.v[dst] = (instr & 0x00FF) as u8;
+                let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                self.registers.v[vx] = (instr & 0x00FF) as u8;
             }
             0x7 => {
                 // 7XNN; ADD Vx, byte
-                let dst = ((instr as u16 & 0x0F00) >> 8) as usize;
-                self.registers.v[dst] = self.registers.v[dst].wrapping_add((instr & 0x00FF) as u8);
+                let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                self.registers.v[vx] = self.registers.v[vx].wrapping_add((instr & 0x00FF) as u8);
             }
             0x8 => {
-                let src = ((instr as u16 & 0x00F0) >> 4) as usize;
-                let dst = ((instr as u16 & 0x0F00) >> 8) as usize;
+                let vy = ((instr as u16 & 0x00F0) >> 4) as usize;
+                let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
                 match instr & 0x000F {
-                    0x0 => self.registers.v[dst] = self.registers.v[src], // 8XY0; LD Vx, Vy
-                    0x1 => self.registers.v[dst] |= self.registers.v[src], // 8XY1; OR Vx, Vy
-                    0x2 => self.registers.v[dst] &= self.registers.v[src], // 8XY2; AND Vx, Vy
-                    0x3 => self.registers.v[dst] ^= self.registers.v[src], // 8XY3; XOR Vx, Vy
+                    0x0 => self.registers.v[vx] = self.registers.v[vy], // 8XY0; LD Vx, Vy
+                    0x1 => self.registers.v[vx] |= self.registers.v[vy], // 8XY1; OR Vx, Vy
+                    0x2 => self.registers.v[vx] &= self.registers.v[vy], // 8XY2; AND Vx, Vy
+                    0x3 => self.registers.v[vx] ^= self.registers.v[vy], // 8XY3; XOR Vx, Vy
                     0x4 => {
                         // 8XY4; ADD Vx, Vy
                         let (result, overflow) =
-                            self.registers.v[dst].overflowing_add(self.registers.v[src]);
+                            self.registers.v[vx].overflowing_add(self.registers.v[vy]);
                         self.registers.v[0xF] = if overflow { 1 } else { 0 };
-                        self.registers.v[dst] = result;
+                        self.registers.v[vx] = result;
                     }
                     0x5 => {
                         // 8XY5; SUB Vx, Vy
                         let (result, overflow) =
-                            self.registers.v[dst].overflowing_sub(self.registers.v[src]);
+                            self.registers.v[vx].overflowing_sub(self.registers.v[vy]);
                         self.registers.v[0xF] = if overflow { 0 } else { 1 };
-                        self.registers.v[dst] = result;
+                        self.registers.v[vx] = result;
                     }
                     0x6 => {
                         // 8XY6; SHR Vx {, Vy}
-                        self.registers.v[0xF] = self.registers.v[dst] & 0b1;
-                        self.registers.v[dst] >>= 1;
+                        self.registers.v[0xF] = self.registers.v[vx] & 0b0000_0001;
+                        self.registers.v[vx] >>= 1;
                     }
                     0x7 => {
                         // 8XY7; SUBN Vx, Vy
                         let (result, overflow) =
-                            self.registers.v[src].overflowing_sub(self.registers.v[dst]);
+                            self.registers.v[vy].overflowing_sub(self.registers.v[vx]);
                         self.registers.v[0xF] = if overflow { 0 } else { 1 };
-                        self.registers.v[dst] = result;
+                        self.registers.v[vx] = result;
+                    }
+                    0xE => {
+                        // 8XYE; SHL Vx {, Vy}
+                        self.registers.v[0xF] = (self.registers.v[vx] & 0b1000_0000) >> 7;
+                        self.registers.v[vx] <<= 1;
                     }
                     _ => unreachable!("Instruction 0x{:04X} is not valid", instr),
                 }
             }
+            0x9 => {
+                // 9XY0; SNE Vx, Vy
+                let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                let vy = ((instr as u16 & 0x00F0) >> 4) as usize;
+                self.registers.pc += if self.registers.v[vx] != self.registers.v[vy] {
+                    2
+                } else {
+                    0
+                }
+            }
+            0xA => self.registers.i = instr & 0x0FFF, // ANNN; LD I, addr
+            0xB => self.jump_addr((instr & 0x0FFF) + self.registers.v[0] as u16), // BNNN; JP V0, addr
+            0xC => {
+                // CXNN; RND Vx, byte
+                let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                self.registers.v[vx] = self.rng.gen::<u8>() & (instr & 0x00FF) as u8;
+            }
+            0xD => {
+                // DXYN; DRW Vx, Vy, nibble
+                let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                let vy = ((instr as u16 & 0x00F0) >> 4) as usize;
+                let n = instr & 0x000F;
+
+                let sprite = self.memory.read_bytes(self.registers.i, n as usize);
+                let x = self.registers.v[vx] as usize;
+                let y = self.registers.v[vy] as usize;
+
+                let collision = self.display.draw(x, y, &sprite);
+                self.drawing = true;
+                self.registers.v[0xF] = if collision { 1 } else { 0 };
+            }
+            0xE => match instr & 0x00FF {
+                0x9E => {
+                    // EX9E; SKP Vx
+                    let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    self.registers.pc += if self.keyboard[self.registers.v[vx] as usize] {
+                        2
+                    } else {
+                        0
+                    }
+                }
+                0xA1 => {
+                    // EXA1; SKNP Vx
+                    let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    self.registers.pc += if !self.keyboard[self.registers.v[vx] as usize] {
+                        2
+                    } else {
+                        0
+                    }
+                }
+                _ => unimplemented!("Instruction 0x{:04X} not implemented", instr),
+            },
+            0xF => match instr & 0x00FF {
+                0x07 => {
+                    // FX07; LD Vx, DT
+                    let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    self.registers.v[vx] = self.delay.get();
+                }
+                0x0A => {
+                    // FX0A; LD Vx, K
+                    let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    self.interrupt = Interrupt::KeyPress(vx as u8);
+                }
+                0x15 => {
+                    // FX15; LD DT, Vx
+                    let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    self.delay.set(self.registers.v[vx]);
+                }
+                0x18 => {
+                    // FX18; LD ST, Vx
+                    let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    self.sound.set(self.registers.v[vx]);
+                }
+                _ => unimplemented!("Instruction 0x{:04X} not implemented", instr),
+            },
             _ => unimplemented!("Instruction 0x{:04X} not implemented", instr),
         }
     }
@@ -177,13 +300,14 @@ impl CPU {
 #[allow(non_snake_case)]
 mod tests {
     use super::*;
+    use crate::display::DISPLAY_WIDTH;
 
     #[test]
     fn test_fetch() {
         let mut cpu = CPU::default();
         cpu.registers.pc = 0x200;
-        cpu.memory.write(0x200, 0x34);
-        cpu.memory.write(0x201, 0x12);
+        cpu.memory.write(0x200, 0x12);
+        cpu.memory.write(0x201, 0x34);
 
         assert_eq!(cpu.fetch(), 0x1234); // check that the instruction is read correctly
         assert_eq!(cpu.registers.pc, 0x202); // check that the program counter is incremented
@@ -374,16 +498,16 @@ mod tests {
     #[test]
     fn test_SHR_Vx() {
         let mut cpu = CPU::default();
-        cpu.registers.v[0] = 0b1100;
+        cpu.registers.v[0] = 0b0000_1100;
 
         cpu.execute(0x8006);
-        assert_eq!(cpu.registers.v[0], 0b0110);
+        assert_eq!(cpu.registers.v[0], 0b0000_0110);
         assert_eq!(cpu.registers.v[0xF], 0);
 
-        cpu.registers.v[0] = 0b1101;
+        cpu.registers.v[0] = 0b0000_1101;
 
         cpu.execute(0x8006);
-        assert_eq!(cpu.registers.v[0], 0b0110);
+        assert_eq!(cpu.registers.v[0], 0b0000_0110);
         assert_eq!(cpu.registers.v[0xF], 1);
     }
 
@@ -403,5 +527,153 @@ mod tests {
         cpu.execute(0x8017);
         assert_eq!(cpu.registers.v[0], 0xDE);
         assert_eq!(cpu.registers.v[0xF], 0);
+    }
+
+    #[test]
+    fn test_SHL_Vx() {
+        let mut cpu = CPU::default();
+        cpu.registers.v[0] = 0b1100_0000;
+
+        cpu.execute(0x800E);
+        assert_eq!(cpu.registers.v[0], 0b1000_0000);
+        assert_eq!(cpu.registers.v[0xF], 1);
+
+        cpu.registers.v[0] = 0b0100_0000;
+
+        cpu.execute(0x800E);
+        assert_eq!(cpu.registers.v[0], 0b1000_0000);
+        assert_eq!(cpu.registers.v[0xF], 0);
+    }
+
+    #[test]
+    fn test_SNE_Vx_Vy() {
+        let mut cpu = CPU::default();
+        cpu.registers.v[0] = 0x12;
+        cpu.registers.v[1] = 0x12;
+        cpu.registers.v[2] = 0x13;
+        cpu.registers.pc = 0x200;
+
+        cpu.execute(0x9010);
+        assert_eq!(cpu.registers.pc, 0x200);
+
+        cpu.execute(0x9020);
+        assert_eq!(cpu.registers.pc, 0x202);
+    }
+
+    #[test]
+    fn test_LD_I_addr() {
+        let mut cpu = CPU::default();
+        cpu.registers.i = 0x1234;
+
+        cpu.execute(0xA432);
+        assert_eq!(cpu.registers.i, 0x0432);
+    }
+
+    #[test]
+    fn test_JP_V0_addr() {
+        let mut cpu = CPU::default();
+        cpu.registers.v[0] = 0x12;
+
+        cpu.execute(0xB234);
+        assert_eq!(cpu.registers.pc, 0x0246);
+    }
+
+    #[test]
+    fn test_DRW_Vx_Vy_nibble() {
+        let mut cpu = CPU::default();
+        cpu.registers.i = 0x200;
+        cpu.registers.v[0] = 0;
+        cpu.registers.v[1] = 0;
+        cpu.memory.write(0x200, 0b11110000);
+        cpu.memory.write(0x201, 0b00001111);
+
+        cpu.execute(0xD012);
+        assert_eq!(cpu.registers.v[0xF], 0);
+        assert!(cpu.drawing);
+
+        let on_pixels = [
+            (0, 0),
+            (1, 0),
+            (2, 0),
+            (3, 0),
+            (4, 1),
+            (5, 1),
+            (6, 1),
+            (7, 1),
+        ];
+        for &(x, y) in on_pixels.iter() {
+            assert_eq!(cpu.display.pixels[y * DISPLAY_WIDTH + x], Pixel::On);
+        }
+    }
+
+    #[test]
+    fn test_SKP_Vx() {
+        let mut cpu = CPU::default();
+        cpu.keyboard[0xB] = true;
+        cpu.registers.v[0] = 0xB;
+        cpu.registers.pc = 0x200;
+
+        cpu.execute(0xE09E);
+        assert_eq!(cpu.registers.pc, 0x202);
+
+        cpu.execute(0xE19E);
+        assert_eq!(cpu.registers.pc, 0x202);
+    }
+
+    #[test]
+    fn test_SKNP_Vx() {
+        let mut cpu = CPU::default();
+        cpu.keyboard[0xB] = true;
+        cpu.registers.v[0] = 0xB;
+        cpu.registers.pc = 0x200;
+
+        cpu.execute(0xE0A1);
+        assert_eq!(cpu.registers.pc, 0x200);
+
+        cpu.execute(0xE1A1);
+        assert_eq!(cpu.registers.pc, 0x202);
+    }
+
+    #[test]
+    fn test_LD_Vx_DT() {
+        let mut cpu = CPU::default();
+        cpu.delay.set(0x12);
+        cpu.registers.v[0] = 0x00;
+
+        cpu.execute(0xF007);
+        assert_eq!(cpu.registers.v[0], 0x12);
+    }
+
+    #[test]
+    fn test_LD_Vx_K() {
+        let mut cpu = CPU::default();
+        cpu.registers.v[0] = 0xFF;
+
+        cpu.execute(0xF00A);
+        assert_eq!(cpu.interrupt, Interrupt::KeyPress(0));
+
+        cpu.key_down(0xB);
+        assert_eq!(cpu.interrupt, Interrupt::None);
+        assert_eq!(cpu.registers.v[0], 0xB);
+    }
+
+    #[test]
+    fn test_LD_DT_Vx() {
+        let mut cpu = CPU::default();
+        cpu.registers.v[0] = 0x12;
+        cpu.delay.set(0x00);
+
+        cpu.execute(0xF015);
+        assert_eq!(cpu.delay.get(), 0x12);
+    }
+
+    #[test]
+    fn test_LD_ST_Vx() {
+        let mut cpu = CPU::default();
+        cpu.registers.v[0] = 0x12;
+        cpu.sound.set(0x00);
+
+        cpu.execute(0xF018);
+        assert_eq!(cpu.sound.get(), 0x12);
     }
 }

@@ -29,6 +29,14 @@ impl MemoryBus {
     pub fn read(&self, addr: Address) -> u8 {
         self.memory[addr as usize]
     }
+
+    pub fn read_bytes(&self, addr: Address, len: usize) -> Vec<u8> {
+        let mut data = Vec::with_capacity(len);
+        for i in 0..len {
+            data.push(self.read(addr + i as Address));
+        }
+        data
+    }
 }
 
 #[cfg(test)]

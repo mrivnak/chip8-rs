@@ -1,3 +1,5 @@
+use crate::timer::Timer;
+
 pub struct Registers {
     pub v: [u8; 16],
     pub i: u16,
