@@ -14,7 +14,7 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Set release version
         run: pwsh ./res/scripts/SetVersion.ps1 ${{ github.ref_name }}
@@ -50,31 +50,30 @@ jobs:
       - name: Create releases directory
         run: mkdir release
 
-      # TODO: use cargo-bundle and cargo-wix to create .deb, .dmg, and .msi files
       - name: Build macOS aarch64-apple-darwin
         if: matrix.platform == 'macos-latest'
         run: |
           cargo build --release --target aarch64-apple-darwin
-          tar cvfJ ./release/GB.rs_${{ github.ref_name }}_macos_arm64.tar.xz ./target/aarch64-apple-darwin/release/gbrs
+          tar cvfJ ./release/chip8-rs_${{ github.ref_name }}_macos_arm64.tar.xz ./target/aarch64-apple-darwin/release/chip8-rs
 
 
       - name: Build macOS x86_64-apple-darwin
         if: matrix.platform == 'macos-latest'
         run: |
           cargo build --release --target x86_64-apple-darwin
-          tar cvfJ ./release/GB.rs_${{ github.ref_name }}_macos_amd64.tar.xz ./target/x86_64-apple-darwin/release/gbrs
+          tar cvfJ ./release/chip8-rs_${{ github.ref_name }}_macos_amd64.tar.xz ./target/x86_64-apple-darwin/release/chip8-rs
 
       - name: Build Linux x86_64-unknown-linux-gnu
         if: matrix.platform == 'ubuntu-latest'
         run: |
           cargo build --release --target x86_64-unknown-linux-gnu
-          tar cvfJ ./release/GB.rs_${{ github.ref_name }}_linux_amd64.tar.xz ./target/x86_64-unknown-linux-gnu/release/gbrs
+          tar cvfJ ./release/chip8-rs_${{ github.ref_name }}_linux_amd64.tar.xz ./target/x86_64-unknown-linux-gnu/release/chip8-rs
 
       - name: Build Windows x86_64-pc-windows-msvc
         if: matrix.platform == 'windows-latest'
         run: |
           cargo build --release --target x86_64-pc-windows-msvc
-          Compress-Archive -Path ./target/x86_64-pc-windows-msvc/release/gbrs.exe -DestinationPath ./release/GB.rs_${{ github.ref_name }}_windows_amd64.zip
+          Compress-Archive -Path ./target/x86_64-pc-windows-msvc/release/chip8-rs.exe -DestinationPath ./release/chip8-rs_${{ github.ref_name }}_windows_amd64.zip
 
 
       - name: Build Changelog
@@ -82,6 +81,7 @@ jobs:
         uses: mikepenz/release-changelog-builder-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
