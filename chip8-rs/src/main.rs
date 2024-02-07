@@ -174,6 +174,7 @@ pub async fn main() {
                 }
             }
             Event::AboutToWait => window.request_redraw(),
+            Event::Resumed => window.request_redraw(),
             _ => {}
         }
     });
