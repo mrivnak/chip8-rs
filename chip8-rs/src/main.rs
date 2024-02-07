@@ -91,22 +91,7 @@ pub async fn main() {
     let system = system_builder.run();
 
     // Main loop
-    let mut pixels = vec![renderer::Pixel::Off; DISPLAY_HEIGHT * DISPLAY_WIDTH];
     let _ = event_loop.run(|event, event_target| {
-        // Pixel rendering
-        if system.has_new_frame() {
-            pixels = system
-                .pixels()
-                .into_iter()
-                .map(|p| match p {
-                    chip8::display::Pixel::On => renderer::Pixel::On,
-                    chip8::display::Pixel::Off => renderer::Pixel::Off,
-                })
-                .collect::<Vec<_>>();
-            window.request_redraw();
-            system.clear_new_frame();
-        }
-
         // Window event handling
         match event {
             Event::WindowEvent {
@@ -157,15 +142,20 @@ pub async fn main() {
                                 ElementState::Released => system.key_up(key as u8),
                             }
                         }
-
-                        // match key_event.state {
-                        //     ElementState::Pressed => todo!(),
-                        //     ElementState::Released => todo!(),
-                        // }
                     }
                     WindowEvent::CloseRequested => event_target.exit(),
                     WindowEvent::Resized(physical_size) => renderer.resize(*physical_size),
                     WindowEvent::RedrawRequested => {
+                        // Pixel rendering
+                        let pixels = system
+                            .pixels()
+                            .into_iter()
+                            .map(|p| match p {
+                                chip8::display::Pixel::On => renderer::Pixel::On,
+                                chip8::display::Pixel::Off => renderer::Pixel::Off,
+                            })
+                            .collect::<Vec<_>>();
+
                         match renderer.render(pixels.as_slice()) {
                             Ok(_) => {}
                             // Reconfigure the surface if lost
@@ -183,6 +173,7 @@ pub async fn main() {
                     _ => {}
                 }
             }
+            Event::AboutToWait => window.request_redraw(),
             _ => {}
         }
     });
