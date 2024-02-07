@@ -2,6 +2,13 @@ name: Cargo Check
 
 on:
   push:
+    branches:
+      - '*'
+      - '!v*'
+  pull_request:
+    types:
+      - opened
+      - synchronize
 
 jobs:
   cargo-check:
