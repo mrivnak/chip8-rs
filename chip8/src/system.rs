@@ -1,5 +1,5 @@
 use crate::cpu;
-use crate::cpu::CPU;
+use crate::cpu::Cpu;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -19,7 +19,7 @@ impl<'a> SystemBuilder<'a> {
     }
 
     pub fn run(self) -> System {
-        let cpu = Arc::new(Mutex::new(CPU::init(self.rom)));
+        let cpu = Arc::new(Mutex::new(Cpu::init(self.rom)));
 
         let tick_thread_cpu = Arc::clone(&cpu);
         let cpu_thread = thread::spawn(move || loop {
@@ -45,7 +45,7 @@ impl<'a> SystemBuilder<'a> {
 }
 
 pub struct System {
-    pub cpu: Arc<Mutex<CPU>>,
+    pub cpu: Arc<Mutex<Cpu>>,
     cpu_thread: thread::JoinHandle<()>,
     timer_thread: thread::JoinHandle<()>,
 }

@@ -10,6 +10,7 @@ use crate::{data::Address, memory::MemoryBus, registers::Registers};
 
 const STACK_SIZE: usize = 16;
 pub const FREQUENCY: u32 = 500; // 500 Hz
+const FONT_START: Address = 0x050; // Arbitrary, but it's convention to start at 0x50
 
 pub type Stack = [Address; STACK_SIZE];
 
@@ -20,7 +21,7 @@ pub enum Interrupt {
     KeyPress(u8),
 }
 
-pub struct CPU {
+pub struct Cpu {
     pub registers: Registers,
     memory: MemoryBus,
     stack: Stack,
@@ -33,9 +34,9 @@ pub struct CPU {
     sound: Timer,
 }
 
-impl Default for CPU {
-    fn default() -> CPU {
-        CPU {
+impl Default for Cpu {
+    fn default() -> Cpu {
+        Cpu {
             registers: Registers::default(),
             memory: MemoryBus::default(),
             stack: [0; STACK_SIZE],
@@ -50,13 +51,12 @@ impl Default for CPU {
     }
 }
 
-impl CPU {
-    pub fn init(rom: &[u8]) -> CPU {
-        let mut cpu = CPU::default();
+impl Cpu {
+    pub fn init(rom: &[u8]) -> Cpu {
+        let mut cpu = Cpu::default();
 
         // Load font into memory
         let font_rom = include_bytes!("../../res/font.bin");
-        const FONT_START: Address = 0x50; // Arbitrary, but it's convention to start at 0x50
         cpu.memory.write_bytes(FONT_START, font_rom);
 
         // Load ROM into memory
@@ -269,6 +269,41 @@ impl CPU {
                     let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
                     self.sound.set(self.registers.v[vx]);
                 }
+                0x1E => {
+                    // FX1E; ADD I, Vx
+                    let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    self.registers.i += self.registers.v[vx] as u16;
+                }
+                0x29 => {
+                    // FX29; LD F, Vx
+                    let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    let digit = self.registers.v[vx];
+                    debug_assert!(digit <= 0xF, "Invalid digit: 0x{:X}", digit);
+                    self.registers.i = (digit as u16 * 5) + FONT_START;
+                }
+                0x33 => {
+                    // FX33; LD B, Vx
+                    let vx = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    let value = self.registers.v[vx];
+                    self.memory.write(self.registers.i, value / 100);
+                    self.memory.write(self.registers.i + 1, (value / 10) % 10);
+                    self.memory.write(self.registers.i + 2, value % 10);
+                }
+                0x55 => {
+                    // FX55; LD [I], Vx
+                    let x = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    for i in 0..=x {
+                        self.memory
+                            .write(self.registers.i + i as u16, self.registers.v[i]);
+                    }
+                }
+                0x65 => {
+                    // FX65; LD Vx, [I]
+                    let x = ((instr as u16 & 0x0F00) >> 8) as usize;
+                    for i in 0..=x {
+                        self.registers.v[i] = self.memory.read(self.registers.i + i as u16);
+                    }
+                }
                 _ => unimplemented!("Instruction 0x{:04X} not implemented", instr),
             },
             _ => unimplemented!("Instruction 0x{:04X} not implemented", instr),
@@ -303,8 +338,19 @@ mod tests {
     use crate::display::DISPLAY_WIDTH;
 
     #[test]
+    fn test_tick_timers() {
+        let mut cpu = Cpu::default();
+        cpu.delay.set(0x12);
+        cpu.sound.set(0x34);
+
+        cpu.tick_timers();
+        assert_eq!(cpu.delay.get(), 0x11);
+        assert_eq!(cpu.sound.get(), 0x33);
+    }
+
+    #[test]
     fn test_fetch() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.pc = 0x200;
         cpu.memory.write(0x200, 0x12);
         cpu.memory.write(0x201, 0x34);
@@ -317,7 +363,7 @@ mod tests {
     fn test_RET() {
         const RET: OpCode = 0x00EE;
 
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.sp = 1;
         cpu.stack[0] = 0x1234;
         cpu.stack[1] = 0x5678;
@@ -335,7 +381,7 @@ mod tests {
     fn test_JMP_addr() {
         const JMP: OpCode = 0x1234;
 
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         assert_eq!(cpu.registers.pc, 0);
         cpu.execute(JMP);
         assert_eq!(cpu.registers.pc, 0x234);
@@ -345,7 +391,7 @@ mod tests {
     fn test_CALL_addr() {
         const CALL: OpCode = 0x2345;
 
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.pc = 0x200;
         cpu.registers.sp = 0;
 
@@ -357,7 +403,7 @@ mod tests {
 
     #[test]
     fn test_SE_Vx_byte() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
         cpu.registers.pc = 0x200;
 
@@ -370,7 +416,7 @@ mod tests {
 
     #[test]
     fn test_SNE_Vx_byte() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
         cpu.registers.pc = 0x200;
 
@@ -383,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_SE_Vx_Vy() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
         cpu.registers.v[1] = 0x12;
         cpu.registers.v[2] = 0x13;
@@ -398,7 +444,7 @@ mod tests {
 
     #[test]
     fn test_LD_Vx_byte() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x00;
 
         cpu.execute(0x6012);
@@ -407,7 +453,7 @@ mod tests {
 
     #[test]
     fn test_ADD_Vx_byte() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
 
         cpu.execute(0x7012);
@@ -421,7 +467,7 @@ mod tests {
 
     #[test]
     fn test_LD_Vx_Vy() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
         cpu.registers.v[1] = 0x34;
 
@@ -431,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_OR_Vx_Vy() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0b1100;
         cpu.registers.v[1] = 0b1010;
 
@@ -441,7 +487,7 @@ mod tests {
 
     #[test]
     fn test_AND_Vx_Vy() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0b1100;
         cpu.registers.v[1] = 0b1010;
 
@@ -451,7 +497,7 @@ mod tests {
 
     #[test]
     fn test_XOR_Vx_Vy() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0b1100;
         cpu.registers.v[1] = 0b1010;
 
@@ -461,7 +507,7 @@ mod tests {
 
     #[test]
     fn test_ADD_Vx_Vy() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
         cpu.registers.v[1] = 0x34;
 
@@ -479,7 +525,7 @@ mod tests {
 
     #[test]
     fn test_SUB_Vx_Vy() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x34;
         cpu.registers.v[1] = 0x12;
 
@@ -497,7 +543,7 @@ mod tests {
 
     #[test]
     fn test_SHR_Vx() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0b0000_1100;
 
         cpu.execute(0x8006);
@@ -513,7 +559,7 @@ mod tests {
 
     #[test]
     fn test_SUBN_Vx_Vy() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
         cpu.registers.v[1] = 0x34;
 
@@ -531,7 +577,7 @@ mod tests {
 
     #[test]
     fn test_SHL_Vx() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0b1100_0000;
 
         cpu.execute(0x800E);
@@ -547,7 +593,7 @@ mod tests {
 
     #[test]
     fn test_SNE_Vx_Vy() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
         cpu.registers.v[1] = 0x12;
         cpu.registers.v[2] = 0x13;
@@ -562,7 +608,7 @@ mod tests {
 
     #[test]
     fn test_LD_I_addr() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.i = 0x1234;
 
         cpu.execute(0xA432);
@@ -571,7 +617,7 @@ mod tests {
 
     #[test]
     fn test_JP_V0_addr() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
 
         cpu.execute(0xB234);
@@ -579,8 +625,16 @@ mod tests {
     }
 
     #[test]
+    fn test_RND_Vx_byte() {
+        let mut cpu = Cpu::default();
+        cpu.rng = Pcg64Mcg::seed_from_u64(0);
+        cpu.execute(0xC012);
+        assert_eq!(cpu.registers.v[0], 0x02);
+    }
+
+    #[test]
     fn test_DRW_Vx_Vy_nibble() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.i = 0x200;
         cpu.registers.v[0] = 0;
         cpu.registers.v[1] = 0;
@@ -608,7 +662,7 @@ mod tests {
 
     #[test]
     fn test_SKP_Vx() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.keyboard[0xB] = true;
         cpu.registers.v[0] = 0xB;
         cpu.registers.pc = 0x200;
@@ -622,7 +676,7 @@ mod tests {
 
     #[test]
     fn test_SKNP_Vx() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.keyboard[0xB] = true;
         cpu.registers.v[0] = 0xB;
         cpu.registers.pc = 0x200;
@@ -636,7 +690,7 @@ mod tests {
 
     #[test]
     fn test_LD_Vx_DT() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.delay.set(0x12);
         cpu.registers.v[0] = 0x00;
 
@@ -646,7 +700,7 @@ mod tests {
 
     #[test]
     fn test_LD_Vx_K() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0xFF;
 
         cpu.execute(0xF00A);
@@ -659,7 +713,7 @@ mod tests {
 
     #[test]
     fn test_LD_DT_Vx() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
         cpu.delay.set(0x00);
 
@@ -669,11 +723,95 @@ mod tests {
 
     #[test]
     fn test_LD_ST_Vx() {
-        let mut cpu = CPU::default();
+        let mut cpu = Cpu::default();
         cpu.registers.v[0] = 0x12;
         cpu.sound.set(0x00);
 
         cpu.execute(0xF018);
         assert_eq!(cpu.sound.get(), 0x12);
+    }
+
+    #[test]
+    fn test_ADD_I_Vx() {
+        let mut cpu = Cpu::default();
+        cpu.registers.i = 0x1234;
+        cpu.registers.v[0] = 0x12;
+
+        cpu.execute(0xF01E);
+        assert_eq!(cpu.registers.i, 0x1246);
+    }
+
+    #[test]
+    fn test_LD_F_Vx() {
+        let mut cpu = Cpu::default();
+        for i in 0x0..=0xF_u16 {
+            cpu.registers.v[0] = i as u8;
+            cpu.registers.i = 0x000;
+
+            cpu.execute(0xF029);
+            assert_eq!(cpu.registers.i, (i * 5) + FONT_START);
+        }
+    }
+
+    #[test]
+    fn test_LD_B_Vx() {
+        let mut cpu = Cpu::default();
+        cpu.registers.i = 0x200;
+        cpu.registers.v[0] = 123;
+
+        cpu.execute(0xF033);
+        assert_eq!(cpu.memory.read(0x200), 1);
+        assert_eq!(cpu.memory.read(0x201), 2);
+        assert_eq!(cpu.memory.read(0x202), 3);
+    }
+
+    #[test]
+    fn test_LD_I_Vx() {
+        let mut cpu = Cpu::default();
+        for i in 0x0..=0xF {
+            cpu.registers.v[i as usize] = i;
+        }
+
+        cpu.registers.i = 0x200;
+        cpu.execute(0xF755);
+
+        for i in 0x0..=0xF_u8 {
+            if i <= 0x7 {
+                assert_eq!(cpu.memory.read(0x200 + i as Address), i);
+            } else {
+                assert_eq!(cpu.memory.read(0x200 + i as Address), 0);
+            }
+        }
+
+        cpu.execute(0xFF55);
+
+        for i in 0x0..=0xF_u8 {
+            assert_eq!(cpu.memory.read(0x200 + i as Address), i);
+        }
+    }
+
+    #[test]
+    fn test_LD_Vx_I() {
+        let mut cpu = Cpu::default();
+        for i in 0x0..=0xF {
+            cpu.memory.write(0x200 + i as Address, i);
+        }
+
+        cpu.registers.i = 0x200;
+        cpu.execute(0xF765);
+
+        for i in 0x0..=0xF_u8 {
+            if i <= 0x7 {
+                assert_eq!(cpu.registers.v[i as usize], i);
+            } else {
+                assert_eq!(cpu.registers.v[i as usize], 0);
+            }
+        }
+
+        cpu.execute(0xFF65);
+
+        for i in 0x0..=0xF_u8 {
+            assert_eq!(cpu.registers.v[i as usize], i);
+        }
     }
 }
