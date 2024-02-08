@@ -110,28 +110,29 @@ pub async fn main() {
                         use winit::keyboard::{KeyCode, PhysicalKey};
                         // Keymap:
                         // on a US layout keyboard, a 4x4 grid on the left side of the keyboard
-                        // 0-3: 1, 2, 3, 4
-                        // 4-7: q, w, e, r
-                        // 8-11: a, s, d, f
-                        // 12-15: z, x, c, v
+                        // Keyboard keys; Chip-8 keys
+                        // 1, 2, 3, 4;    1, 2, 3, C
+                        // Q, W, E, R;    4, 5, 6, D
+                        // A, S, D, F;    7, 8, 9, E
+                        // Z, X, C, V;    A, 0, B, F
 
                         if let Some(key) = match key_event.physical_key {
                             PhysicalKey::Code(code) => match code {
-                                KeyCode::Digit1 => Some(0x0),
-                                KeyCode::Digit2 => Some(0x1),
-                                KeyCode::Digit3 => Some(0x2),
-                                KeyCode::Digit4 => Some(0x3),
+                                KeyCode::Digit1 => Some(0x1),
+                                KeyCode::Digit2 => Some(0x2),
+                                KeyCode::Digit3 => Some(0x3),
+                                KeyCode::Digit4 => Some(0xC),
                                 KeyCode::KeyQ => Some(0x4),
                                 KeyCode::KeyW => Some(0x5),
                                 KeyCode::KeyE => Some(0x6),
-                                KeyCode::KeyR => Some(0x7),
-                                KeyCode::KeyA => Some(0x8),
-                                KeyCode::KeyS => Some(0x9),
-                                KeyCode::KeyD => Some(0xA),
-                                KeyCode::KeyF => Some(0xB),
-                                KeyCode::KeyZ => Some(0xC),
-                                KeyCode::KeyX => Some(0xD),
-                                KeyCode::KeyC => Some(0xE),
+                                KeyCode::KeyR => Some(0xD),
+                                KeyCode::KeyA => Some(0x7),
+                                KeyCode::KeyS => Some(0x8),
+                                KeyCode::KeyD => Some(0x9),
+                                KeyCode::KeyF => Some(0xE),
+                                KeyCode::KeyZ => Some(0xA),
+                                KeyCode::KeyX => Some(0x0),
+                                KeyCode::KeyC => Some(0xB),
                                 KeyCode::KeyV => Some(0xF),
                                 _ => None,
                             },
