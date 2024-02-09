@@ -23,8 +23,6 @@ Chip-8 emulator written in Rust
 
 At the moment chip8.rs only supports running from the command line
 
-> There is also a web demo available on my portfolio (in progress)
-
 ```sh
 # Linux/macOS
 ./chip8 <ROM>
