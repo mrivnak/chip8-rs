@@ -3,8 +3,7 @@ name: Unit Tests
 on:
   push:
     branches:
-      - '*'
-      - '!v*'
+      - 'main'
   pull_request:
     types:
       - opened
