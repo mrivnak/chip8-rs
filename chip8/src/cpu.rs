@@ -166,32 +166,34 @@ impl Cpu {
                         // 8XY4; ADD Vx, Vy
                         let (result, overflow) =
                             self.registers.v[vx].overflowing_add(self.registers.v[vy]);
-                        self.registers.v[0xF] = if overflow { 1 } else { 0 };
                         self.registers.v[vx] = result;
+                        self.registers.v[0xF] = if overflow { 1 } else { 0 };
                     }
                     0x5 => {
                         // 8XY5; SUB Vx, Vy
                         let (result, overflow) =
                             self.registers.v[vx].overflowing_sub(self.registers.v[vy]);
-                        self.registers.v[0xF] = if overflow { 0 } else { 1 };
                         self.registers.v[vx] = result;
+                        self.registers.v[0xF] = if overflow { 0 } else { 1 };
                     }
                     0x6 => {
                         // 8XY6; SHR Vx {, Vy}
-                        self.registers.v[0xF] = self.registers.v[vx] & 0b0000_0001;
+                        let carry = self.registers.v[vx] & 0b0000_0001;
                         self.registers.v[vx] >>= 1;
+                        self.registers.v[0xF] = carry;
                     }
                     0x7 => {
                         // 8XY7; SUBN Vx, Vy
                         let (result, overflow) =
                             self.registers.v[vy].overflowing_sub(self.registers.v[vx]);
-                        self.registers.v[0xF] = if overflow { 0 } else { 1 };
                         self.registers.v[vx] = result;
+                        self.registers.v[0xF] = if overflow { 0 } else { 1 };
                     }
                     0xE => {
                         // 8XYE; SHL Vx {, Vy}
-                        self.registers.v[0xF] = (self.registers.v[vx] & 0b1000_0000) >> 7;
+                        let carry = (self.registers.v[vx] & 0b1000_0000) >> 7;
                         self.registers.v[vx] <<= 1;
+                        self.registers.v[0xF] = carry;
                     }
                     _ => unreachable!("Instruction 0x{:04X} is not valid", instr),
                 }
@@ -473,6 +475,18 @@ mod tests {
 
         cpu.execute(0x8010);
         assert_eq!(cpu.registers.v[0], 0x34);
+
+        cpu.registers.v[0] = 0x12;
+        cpu.registers.v[0xF] = 0x34;
+
+        cpu.execute(0x80F0);
+        assert_eq!(cpu.registers.v[0], 0x34);
+
+        cpu.registers.v[0xF] = 0x12;
+        cpu.registers.v[0] = 0x34;
+
+        cpu.execute(0x8F00);
+        assert_eq!(cpu.registers.v[0xF], 0x34);
     }
 
     #[test]
@@ -483,6 +497,18 @@ mod tests {
 
         cpu.execute(0x8011);
         assert_eq!(cpu.registers.v[0], 0b1110);
+
+        cpu.registers.v[0] = 0b1100;
+        cpu.registers.v[0xF] = 0b1010;
+
+        cpu.execute(0x80F1);
+        assert_eq!(cpu.registers.v[0], 0b1110);
+
+        cpu.registers.v[0xF] = 0b1100;
+        cpu.registers.v[0] = 0b1010;
+
+        cpu.execute(0x8F01);
+        assert_eq!(cpu.registers.v[0xF], 0b1110);
     }
 
     #[test]
@@ -493,6 +519,18 @@ mod tests {
 
         cpu.execute(0x8012);
         assert_eq!(cpu.registers.v[0], 0b1000);
+
+        cpu.registers.v[0] = 0b1100;
+        cpu.registers.v[0xF] = 0b1010;
+
+        cpu.execute(0x80F2);
+        assert_eq!(cpu.registers.v[0], 0b1000);
+
+        cpu.registers.v[0xF] = 0b1100;
+        cpu.registers.v[0] = 0b1010;
+
+        cpu.execute(0x8F02);
+        assert_eq!(cpu.registers.v[0xF], 0b1000);
     }
 
     #[test]
@@ -503,6 +541,18 @@ mod tests {
 
         cpu.execute(0x8013);
         assert_eq!(cpu.registers.v[0], 0b0110);
+
+        cpu.registers.v[0] = 0b1100;
+        cpu.registers.v[0xF] = 0b1010;
+
+        cpu.execute(0x80F3);
+        assert_eq!(cpu.registers.v[0], 0b0110);
+
+        cpu.registers.v[0xF] = 0b1100;
+        cpu.registers.v[0] = 0b1010;
+
+        cpu.execute(0x8F03);
+        assert_eq!(cpu.registers.v[0xF], 0b0110);
     }
 
     #[test]
@@ -521,6 +571,13 @@ mod tests {
         cpu.execute(0x8014);
         assert_eq!(cpu.registers.v[0], 0x00);
         assert_eq!(cpu.registers.v[0xF], 1);
+
+        // Test using vF as vX
+        cpu.registers.v[0xF] = 0xFF;
+        cpu.registers.v[0] = 0xAA;
+
+        cpu.execute(0x8F04);
+        assert_eq!(cpu.registers.v[0xF], 0x1);
     }
 
     #[test]
@@ -539,6 +596,13 @@ mod tests {
         cpu.execute(0x8015);
         assert_eq!(cpu.registers.v[0], 0xDE);
         assert_eq!(cpu.registers.v[0xF], 0);
+
+        // Test using vF as vX
+        cpu.registers.v[0xF] = 0x34;
+        cpu.registers.v[0] = 0x12;
+
+        cpu.execute(0x8F05);
+        assert_eq!(cpu.registers.v[0xF], 0x1);
     }
 
     #[test]
@@ -573,6 +637,13 @@ mod tests {
         cpu.execute(0x8017);
         assert_eq!(cpu.registers.v[0], 0xDE);
         assert_eq!(cpu.registers.v[0xF], 0);
+
+        // Test using vF as vX
+        cpu.registers.v[0xF] = 0x12;
+        cpu.registers.v[0] = 0x34;
+
+        cpu.execute(0x8F07);
+        assert_eq!(cpu.registers.v[0xF], 0x1);
     }
 
     #[test]
