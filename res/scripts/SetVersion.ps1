@@ -1,5 +1,10 @@
 $version = $args[0].replace("v", "")
 
-$file = ".\chip8-rs\src\Cargo.toml"
+$files = @(
+    "./chip8/Cargo.toml"
+    "./chip8-rs/Cargo.toml"
+)
 
-((Get-Content -path $file -Raw) -replace '0.0.0',$version) | Set-Content -Path $file
+foreach ($file in $files) {
+    ((Get-Content -path $file -Raw) -replace '0.0.0', $version) | Set-Content -Path $file
+}

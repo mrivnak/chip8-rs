@@ -2,7 +2,7 @@
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/mrivnak/chip8-rs/check.yml)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/mrivnak/chip8-rs/test.yml?label=tests)
-[![Coverage Status](https://coveralls.io/repos/github/mrivnak/chip8-rs/badge.svg?branch=main)](https://coveralls.io/github/mrivnak/chip8-rs?branch=main)
+[![Coverage Status](https://coveralls.io/repos/github/mrivnak/chip8-rs/badge.svg?branch=develop)](https://coveralls.io/github/mrivnak/chip8-rs?branch=develop)
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/mrivnak/chip8-rs?display_name=tag&sort=semver)
 
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
@@ -12,23 +12,32 @@
 
 Chip-8 emulator written in Rust
 
+> Obligatory note: Technically, this is a chip-8 interpreter, not an emulator. Emulators emulate physical hardware, but
+> there is no physical chip-8 hardware, thus, this is an interpreter, technically...
+
+### Features
+
+- Uses my custom wgpu-based pixel renderer: [pixels-wgpu](https://github.com/mrivnak/pixels-wgpu)
+
 ## Getting Started
 
 At the moment chip8.rs only supports running from the command line
 
+> There is also a web demo available on my portfolio (in progress)
+
 ```sh
 # Linux/macOS
-./chip8-rs <ROM>
+./chip8 <ROM>
 
 # Windows
-.\chip8-rs.exe <ROM>
+.\chip8.exe <ROM>
 ```
 
 ## Development
 
 ### Dependencies
 
-- Rust >= 1.62.1
+- Rust
 
 ### Building
 
@@ -41,3 +50,4 @@ cargo build
 ```sh
 cargo run -- <ROM>
 ```
+

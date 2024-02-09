@@ -1,7 +1,3 @@
 [workspace]
-members = [
-    "chip8-rs",
-    "libchip8"
-]
-
 resolver = "2"
+members = ["chip8", "chip8-rs"]

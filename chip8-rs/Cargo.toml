@@ -1,14 +1,18 @@
 [package]
 name = "chip8-rs"
-description = "Chip 8 Emulator written in Rust"
-authors = ["Mike Rivnak <rivnakm1@gmail.com>"]
+description = "Chip-8 Interpreter"
+authors = ["Michael Rivnak <rivnakm1@gmail.com>"]
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.62.1"
 
 [dependencies]
-clap = { version = "4.2.5", features = ["derive"] }
-env_logger = "0.10.0"
-libchip8 = { path = "../libchip8" }
-wgpu = "0.16.0"
-winit = "0.28.3"
+cfg-if = "1.0.0"
+chip8 = { path = "../chip8" }
+clap = { version = "4.4.11", features = ["derive"] }
+log = "0.4.20"
+pixels-wgpu = { git = "https://github.com/mrivnak/pixels-wgpu", rev = "v0.1.0" }
+tokio = { version = "1.35.1", features = ["full"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["time"] }
+winit = { version = "0.29.7", features = ["rwh_05"] }
+test-case = "3.3.1"
